@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================
+         Orbit Stripe Terminal — POS Assets
+         Registered via ir.asset records in the point_of_sale.assets
+         bundle. The Stripe CDN SDK is loaded via assets_orbit_stripe.xml.
+         ============================================================ -->
+
+    <!-- Tip support -->
+    <record id="asset_stripe_tip_js" model="ir.asset">
+        <field name="name">Orbit Stripe Tip</field>
+        <field name="bundle">point_of_sale.assets</field>
+        <field name="path">orbit_stripe_contactless_payment/static/src/js/stripe_tip.js</field>
+        <field name="sequence">20</field>
+    </record>
+
+    <!-- Main payment handler (two-phase: Send + Confirm) -->
+    <record id="asset_stripe_payment_js" model="ir.asset">
+        <field name="name">Orbit Stripe Payment Handler</field>
+        <field name="bundle">point_of_sale.assets</field>
+        <field name="path">orbit_stripe_contactless_payment/static/src/js/payment_orbit_stripe.js</field>
+        <field name="sequence">30</field>
+    </record>
+
+    <!-- Payment method registration -->
+    <record id="asset_stripe_models_js" model="ir.asset">
+        <field name="name">Orbit Stripe Models</field>
+        <field name="bundle">point_of_sale.assets</field>
+        <field name="path">orbit_stripe_contactless_payment/static/src/js/models_orbit_stripe.js</field>
+        <field name="sequence">40</field>
+    </record>
+
+    <!-- PaymentScreenPaymentLines extension: Confirm button handler -->
+    <record id="asset_stripe_payment_lines_js" model="ir.asset">
+        <field name="name">Orbit Stripe Payment Lines Extension</field>
+        <field name="bundle">point_of_sale.assets</field>
+        <field name="path">orbit_stripe_contactless_payment/static/src/js/orbit_stripe_payment_lines.js</field>
+        <field name="sequence">50</field>
+    </record>
+
+    <!-- XML template: Confirm button for waitingCapture status -->
+    <record id="asset_stripe_payment_lines_xml" model="ir.asset">
+        <field name="name">Orbit Stripe Payment Lines XML</field>
+        <field name="bundle">point_of_sale.assets</field>
+        <field name="path">orbit_stripe_contactless_payment/static/src/xml/OrbitStripePaymentLines.xml</field>
+        <field name="sequence">60</field>
+    </record>
+
+</odoo>

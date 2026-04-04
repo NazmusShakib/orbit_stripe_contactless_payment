@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- ================================================================
+             Security Category
+             ================================================================ -->
+        <record id="module_category_stripe_terminal" model="ir.module.category">
+            <field name="name">Stripe Terminal</field>
+            <field name="description">Manage Stripe Terminal payment permissions</field>
+            <field name="sequence">100</field>
+        </record>
+
+        <!-- ================================================================
+             Groups
+             ================================================================ -->
+
+        <!-- User: can create and process payments, cannot access settings -->
+        <record id="group_stripe_terminal_user" model="res.groups">
+            <field name="name">User</field>
+            <field name="category_id" ref="module_category_stripe_terminal"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+            <field name="comment">
+                Can create Stripe Terminal payment records and process payments.
+                Cannot access Stripe API key settings.
+            </field>
+        </record>
+
+        <!-- Manager: full access including settings and admin functions -->
+        <record id="group_stripe_terminal_manager" model="res.groups">
+            <field name="name">Manager</field>
+            <field name="category_id" ref="module_category_stripe_terminal"/>
+            <field name="implied_ids" eval="[(4, ref('group_stripe_terminal_user'))]"/>
+            <field name="users" eval="[
+                (4, ref('base.user_root')),
+                (4, ref('base.user_admin')),
+            ]"/>
+            <field name="comment">
+                Full access to Stripe Terminal: payments, settings, and API configuration.
+                To grant access to additional users, go to:
+                Settings → Users and Companies → Groups →
+                search 'Stripe Terminal / Manager' → add users.
+            </field>
+        </record>
+
+    </data>
+</odoo>

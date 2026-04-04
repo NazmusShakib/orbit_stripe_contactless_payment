@@ -1,0 +1,10 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_stripe_terminal_payment_user,stripe.terminal.payment user,model_stripe_terminal_payment,group_stripe_terminal_user,1,1,1,0
+access_stripe_terminal_payment_manager,stripe.terminal.payment manager,model_stripe_terminal_payment,group_stripe_terminal_manager,1,1,1,1
+access_stripe_terminal_service_user,stripe.terminal.service user,model_stripe_terminal_service,group_stripe_terminal_user,1,0,0,0
+access_stripe_terminal_service_manager,stripe.terminal.service manager,model_stripe_terminal_service,group_stripe_terminal_manager,1,1,1,1
+access_stripe_setup_wizard_manager,stripe.setup.wizard manager,model_stripe_setup_wizard,group_stripe_terminal_manager,1,1,1,1
+access_pos_payment_method_orbit_stripe_user,pos.payment.method orbit.stripe user,point_of_sale.model_pos_payment_method,group_stripe_terminal_user,1,0,0,0
+access_pos_payment_method_orbit_stripe_manager,pos.payment.method n.stripe manager,point_of_sale.model_pos_payment_method,group_stripe_terminal_manager,1,1,1,0
+access_stripe_refund_wizard_user,stripe.refund.wizard user,model_stripe_refund_wizard,group_stripe_terminal_user,1,1,1,1
+access_stripe_refund_wizard_manager,stripe.refund.wizard manager,model_stripe_refund_wizard,group_stripe_terminal_manager,1,1,1,1

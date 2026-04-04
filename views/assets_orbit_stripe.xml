@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Load Stripe Terminal JS SDK from CDN into POS assets -->
+    <template id="orbit_stripe_terminal_assets_cdn"
+              inherit_id="point_of_sale.assets_common">
+        <xpath expr="." position="inside">
+            <script type="text/javascript" src="https://js.stripe.com/terminal/v1/"></script>
+        </xpath>
+    </template>
+</odoo>

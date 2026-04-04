@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ====================================================================
+         Stripe Setup Wizard — Form View
+         ==================================================================== -->
+    <record id="view_stripe_setup_wizard_form" model="ir.ui.view">
+        <field name="name">stripe.setup.wizard.form</field>
+        <field name="model">stripe.setup.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Stripe Terminal Setup &amp; Test">
+                <sheet>
+                    <div class="o_form_view_container">
+
+                        <h2>
+                            <i class="fa fa-credit-card me-2" style="color:#635BFF;"/>
+                            Stripe Terminal Setup &amp; Test
+                        </h2>
+                        <p class="text-muted">
+                            Use this wizard to verify your Stripe API connection and
+                            create a simulated reader for Phase 1 testing.
+                        </p>
+
+                        <!-- Current Config Summary -->
+                        <group string="Current Configuration">
+                            <field name="secret_key_preview" readonly="1"/>
+                            <field name="location_id_configured" readonly="1"/>
+                            <field name="reader_id_configured" readonly="1"/>
+                        </group>
+
+                        <!-- Step 1: Test Connection -->
+                        <group string="Step 1: Test API Connection" col="1">
+                            <p class="text-muted">
+                                Verify that your Stripe secret key is valid and the API is reachable.
+                            </p>
+                            <button name="action_test_connection"
+                                    string="🔌 Test Stripe Connection"
+                                    type="object"
+                                    class="btn-primary"/>
+                            <field name="connection_message"
+                                   readonly="1"
+                                   widget="text"
+                                   attrs="{'invisible': [('connection_message', '=', False)]}"
+                                   nolabel="1"
+                                   style="font-family: monospace; font-size: 0.85rem;"/>
+                        </group>
+
+                        <!-- Step 2: Create Simulated Reader -->
+                        <group string="Step 2: Create Simulated Reader (Phase 1)" col="1">
+                            <p class="text-muted">
+                                Creates a simulated Stripe Terminal reader linked to your
+                                configured Location ID. The new reader ID will be automatically
+                                saved to Settings.
+                                <br/>
+                                <strong>Requires:</strong> Location ID must be configured first.
+                            </p>
+                            <field name="reader_label" string="Reader Label"/>
+                            <div>
+                                <button name="action_create_simulated_reader"
+                                        string="🖥️ Create Simulated Reader"
+                                        type="object"
+                                        class="btn-primary me-2"/>
+                                <button name="action_list_readers"
+                                        string="📋 List Existing Readers"
+                                        type="object"
+                                        class="btn-secondary"/>
+                            </div>
+                            <field name="reader_result"
+                                   readonly="1"
+                                   widget="text"
+                                   attrs="{'invisible': [('reader_result', '=', False)]}"
+                                   nolabel="1"
+                                   style="font-family: monospace; font-size: 0.85rem;"/>
+                            <field name="reader_id_created"
+                                   readonly="1"
+                                   attrs="{'invisible': [('reader_id_created', '=', False)]}"
+                                   string="Created Reader ID"/>
+                        </group>
+
+                    </div>
+                </sheet>
+                <footer>
+                    <button string="Close" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Action to open the wizard
+         ==================================================================== -->
+    <record id="action_stripe_setup_wizard" model="ir.actions.act_window">
+        <field name="name">Stripe Terminal Setup &amp; Test</field>
+        <field name="res_model">stripe.setup.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="groups_id" eval="[(4, ref('orbit_stripe_contactless_payment.group_stripe_terminal_manager'))]"/>
+    </record>
+
+</odoo>

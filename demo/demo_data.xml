@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!--
+            Demo records for Stripe Terminal Payment module.
+            These are only loaded when Odoo is started with load demo data
+            or when demo data is enabled during database creation.
+
+            Useful for UI testing without needing real Stripe API calls.
+        -->
+
+        <!-- Demo: Succeeded payment (for UI display reference) -->
+        <record id="demo_stripe_payment_succeeded" model="stripe.terminal.payment">
+            <field name="name">STP/2026/00001</field>
+            <field name="description">Demo Table 3 - Lunch Order</field>
+            <field name="amount">42.50</field>
+            <field name="currency_id" ref="base.GBP"/>
+            <field name="state">succeeded</field>
+            <field name="test_mode">True</field>
+            <field name="is_simulated">True</field>
+            <field name="stripe_payment_intent_id">pi_demo_succeeded_001</field>
+            <field name="stripe_charge_id">ch_demo_charge_001</field>
+        </record>
+
+        <!-- Demo: Failed payment -->
+        <record id="demo_stripe_payment_failed" model="stripe.terminal.payment">
+            <field name="name">STP/2026/00002</field>
+            <field name="description">Demo Bar Tab - Declined Card</field>
+            <field name="amount">18.00</field>
+            <field name="currency_id" ref="base.GBP"/>
+            <field name="state">failed</field>
+            <field name="test_mode">True</field>
+            <field name="is_simulated">True</field>
+            <field name="stripe_payment_intent_id">pi_demo_failed_001</field>
+            <field name="stripe_error_message">Your card was declined. Use Stripe test card 4000000000000002 to simulate a decline.</field>
+        </record>
+
+        <!-- Demo: Draft payment (ready to process) -->
+        <record id="demo_stripe_payment_draft" model="stripe.terminal.payment">
+            <field name="name">STP/2026/00003</field>
+            <field name="description">Demo POS Sale - Ready to pay</field>
+            <field name="amount">95.00</field>
+            <field name="currency_id" ref="base.GBP"/>
+            <field name="state">draft</field>
+            <field name="test_mode">True</field>
+            <field name="is_simulated">True</field>
+        </record>
+
+    </data>
+</odoo>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Orbit Stripe Contactless Terminal Integration</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+        h1 { color: #635BFF; }
+        h2 { color: #444; border-bottom: 2px solid #635BFF; padding-bottom: 6px; }
+        .badge { display: inline-block; background: #ffc107; color: #000; padding: 3px 10px; border-radius: 12px; font-size: 0.8em; font-weight: bold; }
+        .step { background: #f8f9fa; border-left: 4px solid #635BFF; padding: 10px 16px; margin: 8px 0; border-radius: 0 4px 4px 0; }
+        code { background: #f1f3f5; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        ul li { margin: 6px 0; }
+    </style>
+</head>
+<body>
+    <h1>Quick start (TL;DR)</h1>
+    <p><span class="badge">Phase 1 — Dev / Test Mode | Production</span></p>
+    <p>
+        Integrates <strong>Stripe Terminal</strong> for contactless in-person card payments directly inside Odoo 16.
+        Phase 1 uses Stripe's test/simulation environment — no real hardware required.
+    </p>
+
+    <h2>Features</h2>
+    <ul>
+        <li>Admin settings for Stripe API credentials (test mode)</li>
+        <li>Create Stripe PaymentIntents from Odoo backend</li>
+        <li>Simulate contactless card-present payments</li>
+        <li>Full payment audit log with chatter / activity tracking</li>
+        <li>Access control: User and Manager groups</li>
+        <li>Ready to extend for real Stripe Terminal hardware (Phase 2)</li>
+    </ul>
+
+    <h2>Payment Flow (3 Steps)</h2>
+    <div class="step"><strong>Step 1:</strong> Create Payment Intent — sends amount to Stripe, gets PaymentIntent ID</div>
+    <div class="step"><strong>Step 2:</strong> Simulate Card Tap — triggers Stripe's simulation endpoint</div>
+    <div class="step"><strong>Step 3:</strong> Confirm Payment — retrieves final status and Charge ID from Stripe</div>
+
+    <h2>Configuration</h2>
+    <p>Go to <strong>Settings → Stripe Terminal</strong> and enter:</p>
+    <ul>
+        <li>Stripe Secret Key (<code>sk_test_...</code>)</li>
+        <li>Stripe Publishable Key (<code>pk_test_...</code>)</li>
+        <li>Terminal Location ID (<code>tml_...</code>)</li>
+        <li>Simulated Reader ID (<code>tmr_...</code>)</li>
+    </ul>
+
+    <h2>Requirements</h2>
+    <ul>
+        <li>Odoo 16</li>
+        <li>Python package: <code>stripe</code> (install via pip)</li>
+        <li>Stripe account with Terminal enabled</li>
+    </ul>
+</body>
+</html>
