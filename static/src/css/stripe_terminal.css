@@ -1,0 +1,132 @@
+/* =============================================================================
+   stripe_terminal.css
+   Styles for the Orbit Stripe Terminal Payment module (Phase 1)
+   ============================================================================= */
+
+/* ── Payment State Badges ───────────────────────────────────────────────────── */
+
+.o_stripe_badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.o_stripe_badge.succeeded  { background-color: #d4edda; color: #155724; }
+.o_stripe_badge.failed     { background-color: #f8d7da; color: #721c24; }
+.o_stripe_badge.processing { background-color: #fff3cd; color: #856404; }
+.o_stripe_badge.draft      { background-color: #e2e3e5; color: #383d41; }
+.o_stripe_badge.cancelled  { background-color: #e2e3e5; color: #383d41; }
+.o_stripe_badge.intent_created { background-color: #cce5ff; color: #004085; }
+
+/* ── Test Mode / Simulated Ribbons ──────────────────────────────────────────── */
+
+.o_stripe_test_ribbon {
+    position: absolute;
+    top: 12px;
+    right: -28px;
+    transform: rotate(45deg);
+    background: #ffc107;
+    color: #000;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 4px 36px;
+    letter-spacing: 0.05em;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+/* ── Form view: amount display ──────────────────────────────────────────────── */
+
+.o_stripe_amount_display {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #2d6a4f;
+    letter-spacing: -0.02em;
+}
+
+/* ── Alert banners ──────────────────────────────────────────────────────────── */
+
+.o_stripe_alert_success {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border-left: 4px solid #28a745;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+}
+
+.o_stripe_alert_error {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    border-left: 4px solid #dc3545;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+}
+
+.o_stripe_alert_warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+    border-left: 4px solid #ffc107;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+}
+
+/* ── Step indicator for the 3-step payment flow ─────────────────────────────── */
+
+.o_stripe_steps {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0;
+    padding: 10px 16px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.o_stripe_step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    color: #6c757d;
+}
+
+.o_stripe_step.active {
+    background: #0d6efd;
+    color: #fff;
+    font-weight: 600;
+}
+
+.o_stripe_step.done {
+    background: #198754;
+    color: #fff;
+}
+
+.o_stripe_step-divider {
+    color: #adb5bd;
+    font-size: 1rem;
+}
+
+/* ── Settings page styles ───────────────────────────────────────────────────── */
+
+.o_stripe_settings_note {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 4px;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    margin-top: 8px;
+}
+
+.o_stripe_settings_note code {
+    background: #f1f3f5;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 0.82rem;
+}

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!--
+            Default ir.config_parameter values for Stripe Terminal.
+            noupdate="1" means these values are loaded on install and not rewritten on upgrade.
+            Actual API keys should be managed from Settings UI.
+        -->
+
+        <!-- Test mode ON by default -->
+        <function model="ir.config_parameter" name="set_param"
+                  eval="('orbit_stripe_contactless_payment.test_mode', 'True')"/>
+
+        <!-- Placeholder values -->
+        <function model="ir.config_parameter" name="set_param"
+                  eval="('orbit_stripe_contactless_payment.secret_key', '')"/>
+
+        <function model="ir.config_parameter" name="set_param"
+                  eval="('orbit_stripe_contactless_payment.publishable_key', '')"/>
+
+        <function model="ir.config_parameter" name="set_param"
+                  eval="('orbit_stripe_contactless_payment.location_id', '')"/>
+
+        <function model="ir.config_parameter" name="set_param"
+                  eval="('orbit_stripe_contactless_payment.reader_id', '')"/>
+
+        <function model="ir.config_parameter" name="set_param"
+                  eval="('orbit_stripe_contactless_payment.webhook_secret', '')"/>
+
+        <function model="ir.config_parameter" name="set_param"
+                  eval="('orbit_stripe_contactless_payment.tip_enabled', 'False')"/>
+
+        <function model="ir.config_parameter" name="set_param"
+                  eval="('orbit_stripe_contactless_payment.tip_percentages', '10,15,20')"/>
+
+        <!-- Sequence for payment references -->
+        <record id="seq_stripe_terminal_payment" model="ir.sequence">
+            <field name="name">Stripe Terminal Payment</field>
+            <field name="code">stripe.terminal.payment</field>
+            <field name="prefix">STP/%(year)s/</field>
+            <field name="padding">5</field>
+            <field name="number_next">1</field>
+            <field name="number_increment">1</field>
+            <field name="company_id" eval="False"/>
+        </record>
+    </data>
+</odoo>

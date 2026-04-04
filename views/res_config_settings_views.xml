@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ====================================================================
+         Extend Odoo Settings with Stripe Terminal configuration section.
+         Inherits from base.res_config_settings_view_form (the root form view).
+         data-key="orbit_stripe_contactless_payment" matches our installed module
+         so Odoo's Settings sidebar shows our app block automatically.
+         ==================================================================== -->
+    <record id="res_config_settings_view_stripe_terminal" model="ir.ui.view">
+        <field name="name">res.config.settings.view.stripe.terminal</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[hasclass('settings')]" position="inside">
+
+                <div class="app_settings_block"
+                     data-string="Stripe Terminal"
+                     string="Stripe Terminal"
+                     data-key="orbit_stripe_contactless_payment"
+                     groups="orbit_stripe_contactless_payment.group_stripe_terminal_manager">
+
+                    <h2>Stripe Terminal</h2>
+                    <!-- <div class="app_settings_header pt-1 pb-1 bg-warning bg-opacity-25">
+                        Configure Stripe Terminal for contactless in-person card payments in the UK.
+                        Supports physical cards (Visa, Mastercard, Amex, Maestro), Apple Pay (iOS)
+                        and Google Pay (Android) via any Stripe Terminal reader or Tap to Pay on iPhone/Android.
+                        <br/><br/>
+                        <strong>UK accounts must use GBP currency.</strong>
+                        Ensure your Odoo company currency is set to <strong>GBP</strong>
+                        (Settings &#8594; Companies &#8594; Currency).
+                        <br/>
+                        API Keys:
+                        <a href="https://dashboard.stripe.com/test/apikeys" target="_blank">
+                            Stripe Dashboard &#8599;
+                        </a>
+                    </div> -->
+
+                    <!-- Test Mode toggle -->
+                    <div class="row mt16 o_settings_container">
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane">
+                                <field name="stripe_test_mode" widget="boolean_toggle"/>
+                            </div>
+                            <div class="o_setting_right_pane">
+                                <label for="stripe_test_mode" string="Test Mode"/>
+                                <div class="text-muted">
+                                    Enable for testing with <code>sk_test_...</code> keys and simulated readers.
+                                    <strong>Disable for live production payments</strong> with real hardware
+                                    or Tap to Pay on iPhone/Android. Use <code>sk_live_...</code> key in live mode.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- API Keys -->
+                    <div class="row mt16 o_settings_container">
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="stripe_secret_key" string="Stripe Secret Key"/>
+                                <field name="stripe_secret_key"
+                                       password="True"
+                                       placeholder="sk_test_... or sk_live_..."/>
+                                <div class="text-muted">
+                                    Stripe Dashboard &#8594; Developers &#8594; API Keys.
+                                    Use <code>sk_test_...</code> for Test Mode,
+                                    <code>sk_live_...</code> for live payments.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="stripe_publishable_key" string="Stripe Publishable Key"/>
+                                <field name="stripe_publishable_key"
+                                       placeholder="pk_test_... or pk_live_..."/>
+                                <div class="text-muted">
+                                    Used by the frontend JS SDK.
+                                    Use <code>pk_test_...</code> for Test Mode,
+                                    <code>pk_live_...</code> for live payments.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Terminal IDs -->
+                    <div class="row mt16 o_settings_container">
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="stripe_terminal_location_id" string="Terminal Location ID"/>
+                                <field name="stripe_terminal_location_id"
+                                       placeholder="tml_..."/>
+                                <div class="text-muted">
+                                    Stripe Dashboard &#8594; Terminal &#8594; Locations.
+                                    Create a UK location and copy the <code>tml_...</code> ID here.
+                                    Required for registering readers and Tap to Pay devices.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="stripe_reader_id" string="Stripe Reader ID"/>
+                                <field name="stripe_reader_id"
+                                       placeholder="tmr_..."/>
+                                <div class="text-muted">
+                                    The <code>tmr_...</code> ID of your reader from Stripe Dashboard
+                                    &#8594; Terminal &#8594; Readers. For Tap to Pay on iPhone/Android,
+                                    the reader ID is provided by the Stripe Terminal mobile SDK.
+                                    In test mode, use the Setup Wizard below to create a simulated reader.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Supported payment methods info box -->
+                    <div class="row mt16 o_settings_container">
+                        <div class="col-12 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <div class="alert alert-info" role="alert">
+                                    <strong>&#128736; Supported contactless payment methods in the UK:</strong>
+                                    <ul class="mb-0 mt-1">
+                                        <li>Physical contactless cards — Visa, Mastercard, Amex, Maestro</li>
+                                        <li>Apple Pay (iOS) — via Tap to Pay on iPhone or any Stripe Terminal reader</li>
+                                        <li>Google Pay (Android) — via Tap to Pay on Android or any Stripe Terminal reader</li>
+                                        <li>Samsung Pay and other NFC wallet apps</li>
+                                    </ul>
+                                    <br/>
+                                    <strong>Currency:</strong> Must be <strong>GBP</strong> for UK Stripe accounts.
+                                    Set your company currency to GBP in Odoo company settings.
+                                    <br/>
+                                    <strong>Get Stripe API Keys:</strong>
+                                    <a href="https://dashboard.stripe.com/test/apikeys" target="_blank">
+                                        Stripe Dashboard &#8599;
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tip / Gratuity Settings -->
+                    <div class="row mt16 o_settings_container">
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane">
+                                <field name="stripe_tip_enabled" widget="boolean_toggle"/>
+                            </div>
+                            <div class="o_setting_right_pane">
+                                <label for="stripe_tip_enabled" string="Enable Tip / Gratuity"/>
+                                <div class="text-muted">
+                                    Show a tip selection popup before the customer taps their card.
+                                    Supports preset percentages and custom amounts.
+                                    Stripe Terminal allows capturing up to 20% above the
+                                    authorised amount to accommodate tips (UK/GBP supported).
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box"
+                             attrs="{'invisible': [('stripe_tip_enabled', '=', False)]}">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="stripe_tip_percentages" string="Tip Percentages"/>
+                                <field name="stripe_tip_percentages"
+                                       placeholder="10,15,20"/>
+                                <div class="text-muted">
+                                    Comma-separated percentage options shown to customers
+                                    (e.g. <code>10,15,20</code> shows 10%, 15%, 20% buttons).
+                                    A "Custom" option is always available.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Setup Wizard button -->
+                    <div class="row mt16 o_settings_container">
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="stripe_secret_key" string="Setup and Test"/>
+                                <div>
+                                    <button name="action_open_setup_wizard"
+                                            string="Open Setup and Test Wizard"
+                                            type="object"
+                                            class="btn btn-primary mt4"/>
+                                </div>
+                                <div class="text-muted">
+                                    Test your API connection and create a simulated reader (test mode)
+                                    without leaving Odoo.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="stripe_webhook_secret" string="Webhook Secret"/>
+                                <field name="stripe_webhook_secret"
+                                       password="True"
+                                       placeholder="whsec_..."/>
+                                <div class="text-muted">
+                                    For real-time payment confirmation via Stripe webhooks.
+                                    Webhook URL: <code>/stripe/terminal/webhook</code>.
+                                    Get the secret from Stripe Dashboard &#8594; Developers &#8594; Webhooks.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

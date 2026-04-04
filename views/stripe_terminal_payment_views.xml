@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ====================================================================
+         Stripe Terminal Payment — Form View
+         ==================================================================== -->
+    <record id="view_stripe_terminal_payment_form" model="ir.ui.view">
+        <field name="name">stripe.terminal.payment.form</field>
+        <field name="model">stripe.terminal.payment</field>
+        <field name="arch" type="xml">
+            <form string="Stripe Terminal Payment">
+
+                <!-- Status Bar -->
+                <header>
+                    <button name="action_create_payment_intent"
+                            string="1. Create Payment Intent"
+                            type="object"
+                            class="btn-primary"
+                            attrs="{'invisible': [('state', '!=', 'draft')]}"
+                            confirm="Create a PaymentIntent with Stripe for this amount?"/>
+
+                    <button name="action_simulate_payment"
+                            string="2. Simulate Card Tap"
+                            type="object"
+                            class="btn-primary"
+                            attrs="{'invisible': [('state', '!=', 'intent_created')]}"
+                            confirm="Simulate a contactless card payment on the configured reader?"/>
+
+                    <button name="action_confirm_payment"
+                            string="3. Confirm Payment"
+                            type="object"
+                            class="btn-success"
+                            attrs="{'invisible': [('state', 'not in', ['intent_created', 'processing'])]}"
+                            confirm="Retrieve and confirm the payment status from Stripe?"/>
+
+                    <button name="action_cancel_payment"
+                            string="Cancel Payment"
+                            type="object"
+                            class="btn-danger"
+                            attrs="{'invisible': [('state', 'in', ['succeeded', 'cancelled', 'draft'])]}"
+                            confirm="Cancel this payment with Stripe?"/>
+
+                    <button name="action_reset_to_draft"
+                            string="Reset to Draft"
+                            type="object"
+                            attrs="{'invisible': [('state', 'not in', ['failed', 'cancelled'])]}"/>
+
+                    <button name="action_open_stripe_dashboard"
+                            string="View in Stripe Dashboard ↗"
+                            type="object"
+                            class="btn-link"
+                            attrs="{'invisible': [('stripe_payment_intent_id', '=', False)]}"/>
+
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,intent_created,processing,succeeded"/>
+                </header>
+
+                <!-- Alert banners for key states -->
+                <div class="alert alert-success mb-0 rounded-0" role="alert"
+                     attrs="{'invisible': [('state', '!=', 'succeeded')]}">
+                    <i class="fa fa-check-circle me-1"/>
+                    <strong>Payment Succeeded!</strong>
+                    Charge ID: <field name="stripe_charge_id" readonly="1" class="d-inline"/>
+                </div>
+                <div class="alert alert-danger mb-0 rounded-0" role="alert"
+                     attrs="{'invisible': [('state', '!=', 'failed')]}">
+                    <i class="fa fa-times-circle me-1"/>
+                    <strong>Payment Failed:</strong>
+                    <field name="stripe_error_message" readonly="1" class="d-inline"/>
+                </div>
+                <div class="alert alert-warning mb-0 rounded-0" role="status"
+                     attrs="{'invisible': [('state', '!=', 'processing')]}">
+                    <i class="fa fa-spinner fa-spin me-1"/>
+                    <strong>Processing…</strong>
+                    The reader is collecting the payment. Click "Confirm Payment" to check the result.
+                </div>
+
+                <sheet>
+                    <!-- Test mode badge -->
+                    <div class="oe_button_box" name="button_box">
+                        <button class="oe_stat_button" type="object"
+                                name="action_open_stripe_dashboard"
+                                attrs="{'invisible': [('stripe_payment_intent_id', '=', False)]}"
+                                icon="fa-external-link">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Stripe</span>
+                                <span class="o_stat_text">Dashboard</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <widget name="web_ribbon" title="TEST MODE" bg_color="bg-warning"
+                            attrs="{'invisible': [('test_mode', '=', False)]}"/>
+                    <widget name="web_ribbon" title="SIMULATED" bg_color="bg-info"
+                            attrs="{'invisible': [('is_simulated', '=', False)]}"/>
+
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group string="Payment Details">
+                            <field name="description"
+                                   attrs="{'readonly': [('state', '!=', 'draft')]}"/>
+                            <field name="amount"
+                                   attrs="{'readonly': [('state', '!=', 'draft')]}"
+                                   widget="monetary"
+                                   options="{'currency_field': 'currency_id'}"/>
+                            <field name="currency_id"
+                                   attrs="{'readonly': [('state', '!=', 'draft')]}"
+                                   options="{'no_create': True}"/>
+                            <field name="user_id" readonly="1"/>
+                            <field name="company_id" readonly="1" groups="base.group_multi_company"/>
+                        </group>
+                        <group string="Mode">
+                            <field name="test_mode" readonly="1"/>
+                            <field name="is_simulated" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Stripe References" name="stripe_refs">
+                            <group>
+                                <group string="PaymentIntent">
+                                    <field name="stripe_payment_intent_id" readonly="1"/>
+                                    <field name="stripe_client_secret" readonly="1" password="True"/>
+                                    <field name="amount_stripe" readonly="1"/>
+                                </group>
+                                <group string="Reader / Charge">
+                                    <field name="stripe_reader_id" readonly="1"/>
+                                    <field name="stripe_charge_id" readonly="1"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Timestamps" name="timestamps">
+                            <group>
+                                <field name="intent_created_at" readonly="1"/>
+                                <field name="payment_completed_at" readonly="1"/>
+                                <field name="create_date" readonly="1" string="Record Created"/>
+                                <field name="write_date" readonly="1" string="Last Updated"/>
+                            </group>
+                        </page>
+                        <page string="Error Details" name="errors"
+                              attrs="{'invisible': [('stripe_error_message', '=', False)]}">
+                            <field name="stripe_error_message" readonly="1" widget="text"/>
+                        </page>
+                    </notebook>
+                </sheet>
+
+                <!-- Chatter / Activity log -->
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Stripe Terminal Payment — List View
+         ==================================================================== -->
+    <record id="view_stripe_terminal_payment_list" model="ir.ui.view">
+        <field name="name">stripe.terminal.payment.list</field>
+        <field name="model">stripe.terminal.payment</field>
+        <field name="arch" type="xml">
+            <tree string="Stripe Terminal Payments"
+                  decoration-success="state == 'succeeded'"
+                  decoration-danger="state == 'failed'"
+                  decoration-warning="state == 'processing'"
+                  decoration-muted="state in ('cancelled', 'draft')"
+                  decoration-info="state == 'intent_created'">
+                <field name="name"/>
+                <field name="description"/>
+                <field name="amount" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                <field name="currency_id" invisible="1"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'succeeded'"
+                       decoration-danger="state == 'failed'"
+                       decoration-warning="state == 'processing'"
+                       decoration-info="state == 'intent_created'"/>
+                <field name="stripe_payment_intent_id"/>
+                <field name="stripe_charge_id"/>
+                <field name="test_mode" widget="boolean_toggle"/>
+                <field name="user_id"/>
+                <field name="create_date" string="Date"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Stripe Terminal Payment — Search View
+         ==================================================================== -->
+    <record id="view_stripe_terminal_payment_search" model="ir.ui.view">
+        <field name="name">stripe.terminal.payment.search</field>
+        <field name="model">stripe.terminal.payment</field>
+        <field name="arch" type="xml">
+            <search string="Search Stripe Payments">
+                <field name="name" string="Reference"/>
+                <field name="description"/>
+                <field name="stripe_payment_intent_id" string="PaymentIntent ID"/>
+                <field name="stripe_charge_id" string="Charge ID"/>
+                <field name="user_id" string="Created By"/>
+                <separator/>
+                <filter string="Draft" name="filter_draft"
+                        domain="[('state', '=', 'draft')]"/>
+                <filter string="Succeeded" name="filter_succeeded"
+                        domain="[('state', '=', 'succeeded')]"/>
+                <filter string="Failed" name="filter_failed"
+                        domain="[('state', '=', 'failed')]"/>
+                <filter string="Processing" name="filter_processing"
+                        domain="[('state', '=', 'processing')]"/>
+                <filter string="Cancelled" name="filter_cancelled"
+                        domain="[('state', '=', 'cancelled')]"/>
+                <separator/>
+                <filter string="Test Mode" name="filter_test"
+                        domain="[('test_mode', '=', True)]"/>
+                <filter string="Simulated" name="filter_simulated"
+                        domain="[('is_simulated', '=', True)]"/>
+                <separator/>
+                <filter string="Today" name="filter_today"
+                        domain="[('create_date', '>=', datetime.datetime.combine(context_today(), datetime.time(0,0,0)))]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                    <filter string="Currency" name="group_currency" context="{'group_by': 'currency_id'}"/>
+                    <filter string="Created By" name="group_user" context="{'group_by': 'user_id'}"/>
+                    <filter string="Date" name="group_date" context="{'group_by': 'create_date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Action: Open Stripe Terminal Payments
+         ==================================================================== -->
+    <record id="action_stripe_terminal_payment" model="ir.actions.act_window">
+        <field name="name">Stripe Terminal Payments</field>
+        <field name="res_model">stripe.terminal.payment</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_stripe_terminal_payment_search"/>
+        <field name="context">{'search_default_filter_today': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No payments yet — create your first Stripe Terminal payment!
+            </p>
+            <p>
+                Use the <strong>New</strong> button to create a payment, then:
+                <ol>
+                    <li>Enter an amount and click <b>Create Payment Intent</b></li>
+                    <li>Click <b>Simulate Card Tap</b> to simulate a contactless payment</li>
+                    <li>Click <b>Confirm Payment</b> to finalise and record the result</li>
+                </ol>
+            </p>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Action: New Payment (quick create shortcut)
+         ==================================================================== -->
+    <record id="action_stripe_terminal_payment_new" model="ir.actions.act_window">
+        <field name="name">New Stripe Payment</field>
+        <field name="res_model">stripe.terminal.payment</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+        <field name="context">{'default_test_mode': True, 'default_is_simulated': True}</field>
+    </record>
+
+</odoo>

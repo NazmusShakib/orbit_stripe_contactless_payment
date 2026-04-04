@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="pos_payment_method_view_form_inherit_orbit_stripe"
+            model="ir.ui.view">
+        <field name="name">pos.payment.method.form.inherit.orbit.stripe</field>
+        <field name="model">pos.payment.method</field>
+        <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//field[@name='use_payment_terminal']" position="after">
+
+                <!-- Reader ID override — only visible when Stripe Terminal is selected -->
+                <field name="orbit_stripe_reader_id"
+                       attrs="{'invisible': [('use_payment_terminal', '!=', 'orbit_stripe_terminal')]}"
+                       placeholder="tmr_... (leave blank to use global setting)"/>
+
+                <!-- Info box — only visible when Stripe Terminal is selected -->
+                <div colspan="2"
+                     attrs="{'invisible': [('use_payment_terminal', '!=', 'orbit_stripe_terminal')]}">
+                    <div class="alert alert-info mt-2" role="alert">
+                        <strong>&#128736; Stripe Terminal — Contactless Payments</strong>
+                        <p class="mb-1 mt-2">Accepts all contactless payments:</p>
+                        <ul class="mb-2">
+                            <li>Visa, Mastercard, Amex, Maestro (physical tap)</li>
+                            <li>Apple Pay — Tap to Pay on iPhone or Stripe reader</li>
+                            <li>Google Pay — Tap to Pay on Android or Stripe reader</li>
+                            <li>Samsung Pay and other NFC wallets</li>
+                        </ul>
+                        <p class="mb-0">
+                            <strong>Currency:</strong> Journal must use <strong>GBP</strong> for UK accounts.
+                            <br/>
+                            <strong>Reader ID:</strong> Leave blank to use the global reader from
+                            <em>Settings &#8594; Stripe Terminal</em>, or enter a specific
+                            <code>tmr_...</code> ID to assign a dedicated reader to this payment method.
+                            <br/>
+                            <strong>Test mode:</strong> Configure API keys and switch between test/live
+                            in <em>Settings &#8594; Stripe Terminal</em>.
+                        </p>
+                    </div>
+                </div>
+
+            </xpath>
+        </field>
+    </record>
+</odoo>

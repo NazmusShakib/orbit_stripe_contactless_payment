@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Refund Wizard Form View -->
+    <record id="stripe_refund_wizard_view_form" model="ir.ui.view">
+        <field name="name">stripe.refund.wizard.form</field>
+        <field name="model">stripe.refund.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Issue Stripe Refund">
+                <sheet>
+                    <div class="oe_title">
+                        <h2>💸 Issue Refund</h2>
+                    </div>
+
+                    <!-- Payment summary -->
+                    <group string="Original Payment">
+                        <field name="payment_id" invisible="1"/>
+                        <field name="payment_name" readonly="1"/>
+                        <field name="currency_id" invisible="1"/>
+                        <field name="max_refund" invisible="1"/>
+                        <field name="original_amount" readonly="1"
+                               widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                        <field name="already_refunded" readonly="1"
+                               widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                    </group>
+
+                    <!-- Refund options -->
+                    <group string="Refund Details">
+                        <field name="refund_type" widget="radio"/>
+                        <field name="refund_amount"
+                               widget="monetary"
+                               options="{'currency_field': 'currency_id'}"
+                               attrs="{'readonly': [('refund_type', '=', 'full')]}"/>
+                        <field name="reason"/>
+                        <field name="note" placeholder="Optional internal note..."/>
+                    </group>
+
+                    <!-- Info box -->
+                    <div class="alert alert-info" role="alert">
+                        <strong>ℹ️ How refunds work:</strong>
+                        <ul class="mb-0 mt-1">
+                            <li>The refund is sent directly to the customer's original payment method
+                                (card, Apple Pay, Google Pay, etc.)</li>
+                            <li>Refunds typically appear on the customer's statement within
+                                <strong>5–10 business days</strong></li>
+                            <li>This action calls the Stripe API immediately — it cannot be undone</li>
+                            <li>Partial refunds can be issued multiple times up to the original amount</li>
+                        </ul>
+                    </div>
+                </sheet>
+                <footer>
+                    <button name="action_confirm_refund"
+                            string="Issue Refund"
+                            type="object"
+                            class="btn-danger"
+                            icon="fa-undo"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Add Refund button to StripeTerminalPayment form view -->
+    <record id="stripe_terminal_payment_view_form_refund_btn"
+            model="ir.ui.view">
+        <field name="name">stripe.terminal.payment.form.refund.button</field>
+        <field name="model">stripe.terminal.payment</field>
+        <field name="inherit_id" ref="orbit_stripe_contactless_payment.view_stripe_terminal_payment_form"/>
+        <field name="arch" type="xml">
+            <!-- Add refund button in header buttons area -->
+            <xpath expr="//button[@name='action_cancel_payment']" position="after">
+                <button name="action_open_refund_wizard"
+                        string="💸 Issue Refund"
+                        type="object"
+                        class="btn-warning"
+                        attrs="{'invisible': [('state', 'not in', ['succeeded', 'partially_refunded'])]}"/>
+            </xpath>
+
+            <!-- Add refund fields in a new group after the main info -->
+            <xpath expr="//field[@name='payment_completed_at']" position="after">
+                <field name="stripe_refund_id"
+                       attrs="{'invisible': [('stripe_refund_id', '=', False)]}"
+                       readonly="1"/>
+                <field name="refund_amount"
+                       widget="monetary"
+                       options="{'currency_field': 'currency_id'}"
+                       attrs="{'invisible': [('refund_amount', '=', 0.0)]}"
+                       readonly="1"/>
+                <field name="refund_reason"
+                       attrs="{'invisible': [('refund_reason', '=', False)]}"
+                       readonly="1"/>
+                <field name="refund_date"
+                       attrs="{'invisible': [('refund_date', '=', False)]}"
+                       readonly="1"/>
+                <field name="refund_note"
+                       attrs="{'invisible': [('refund_note', '=', False)]}"
+                       readonly="1"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!--
+        Extends PaymentScreenPaymentLines to add a green "Confirm Payment"
+        button for the 'waitingCapture' status used by Stripe Terminal.
+
+        Flow:
+          pending        -> "Send" button (cashier clicks to charge reader)
+          waitingCard    -> "Waiting for card" + Cancel
+          waitingCapture -> "Confirm Payment" button (NEW - after contactless tap)
+          done           -> "Payment Successful"
+
+        In Stripe dev/simulation mode the card tap is auto-simulated,
+        so the Confirm button appears immediately after clicking Send.
+    -->
+    <t t-name="orbit_stripe_contactless_payment.PaymentScreenPaymentLines"
+       t-inherit="point_of_sale.PaymentScreenPaymentLines"
+       t-inherit-mode="extension"
+       owl="1">
+
+        <!--
+            Split the existing block that groups waiting/waitingCancel/waitingCapture
+            into two: standard spinner for waiting/waitingCancel, and a Confirm
+            button for waitingCapture.
+
+            Original t-elif:
+              ['waiting', 'waitingCancel', 'waitingCapture'].includes(line.payment_status)
+        -->
+        <xpath expr="//t[@t-elif][contains(@t-elif, 'waitingCapture')]"
+               position="replace">
+
+            <!-- Standard spinner (unchanged) -->
+            <t t-elif="['waiting', 'waitingCancel'].includes(line.payment_status)">
+                <div class="electronic_status">
+                    Request sent
+                </div>
+                <div>
+                    <i class="fa fa-circle-o-notch fa-spin" role="img"/>
+                </div>
+            </t>
+
+            <!--
+                waitingCapture: card tapped and confirmed by Stripe network.
+                Cashier must click Confirm to capture the payment.
+                In dev/simulation mode this appears immediately after Send.
+            -->
+            <t t-elif="line.payment_status == 'waitingCapture'">
+                <div class="electronic_status orbit-stripe-tap-done">
+                    <i class="fa fa-check-circle"/> Card tap detected &#8212; confirm to complete
+                </div>
+                <div class="button orbit-stripe-confirm-btn"
+                     title="Confirm and capture the payment"
+                     t-on-click="() => this.onOrbitStripeConfirm(line)">
+                    <i class="fa fa-lock"/> Confirm Payment
+                </div>
+            </t>
+
+        </xpath>
+
+    </t>
+
+</templates>

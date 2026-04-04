@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ====================================================================
+         Root Menu: Stripe Terminal
+         ==================================================================== -->
+    <menuitem
+        id="menu_stripe_terminal_root"
+        name="Stripe Terminal"
+        sequence="85"
+        web_icon="orbit_stripe_contactless_payment,static/description/icon.png"
+        groups="orbit_stripe_contactless_payment.group_stripe_terminal_user,base.group_system"/>
+
+    <!-- ====================================================================
+         Sub-menu: Payments
+         ==================================================================== -->
+    <menuitem
+        id="menu_stripe_terminal_payments"
+        name="Payments"
+        parent="menu_stripe_terminal_root"
+        sequence="10"
+        groups="orbit_stripe_contactless_payment.group_stripe_terminal_user,base.group_system"/>
+
+    <menuitem
+        id="menu_stripe_terminal_payment_list"
+        name="All Payments"
+        parent="menu_stripe_terminal_payments"
+        action="action_stripe_terminal_payment"
+        sequence="10"
+        groups="orbit_stripe_contactless_payment.group_stripe_terminal_user,base.group_system"/>
+
+    <menuitem
+        id="menu_stripe_terminal_payment_new"
+        name="New Payment"
+        parent="menu_stripe_terminal_payments"
+        action="action_stripe_terminal_payment_new"
+        sequence="20"
+        groups="orbit_stripe_contactless_payment.group_stripe_terminal_user,base.group_system"/>
+
+    <!-- ====================================================================
+         Sub-menu: Configuration (Manager only)
+         ==================================================================== -->
+    <menuitem
+        id="menu_stripe_terminal_config"
+        name="Configuration"
+        parent="menu_stripe_terminal_root"
+        sequence="90"
+        groups="orbit_stripe_contactless_payment.group_stripe_terminal_manager,base.group_system"/>
+
+    <menuitem
+        id="menu_stripe_terminal_settings"
+        name="Settings"
+        parent="menu_stripe_terminal_config"
+        action="base_setup.action_general_configuration"
+        sequence="10"
+        groups="orbit_stripe_contactless_payment.group_stripe_terminal_manager,base.group_system"/>
+
+</odoo>
