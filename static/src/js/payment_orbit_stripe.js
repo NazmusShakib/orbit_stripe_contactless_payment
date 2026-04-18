@@ -55,8 +55,46 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
         // ===================================================================
 
         _isTestMode: function () {
-            // Injected into pos.config by PosSession._get_pos_ui_pos_config()
-            return this.pos.config.orbit_stripe_test_mode !== false;
+            return this._parseTestModeValue(
+                this.pos.config && this.pos.config.orbit_stripe_test_mode
+            );
+        },
+
+        _parseTestModeValue: function (value) {
+            return ![false, 'False', 'false', 0, '0', null].includes(value);
+        },
+
+        _refreshRuntimeConfig: async function () {
+            try {
+                const data = await rpc.query({
+                    model: 'pos.payment.method',
+                    method: 'orbit_stripe_runtime_config',
+                    kwargs: { context: this.pos.env.session.user_context },
+                }, { silent: true });
+
+                if (!data) {
+                    return;
+                }
+
+                if (this.pos.config) {
+                    this.pos.config.orbit_stripe_test_mode =
+                        this._parseTestModeValue(data.test_mode);
+                    this.pos.config.orbit_stripe_reader_id = data.reader_id || '';
+                    this.pos.config.orbit_stripe_publishable_key =
+                        data.publishable_key || '';
+                }
+
+                console.log(
+                    '[OrbitStripe] Runtime config refreshed. testMode=%s reader=%s',
+                    this._isTestMode(),
+                    (data.reader_id || '(auto)')
+                );
+            } catch (err) {
+                console.warn(
+                    '[OrbitStripe] Runtime config refresh failed. Using cached POS config.',
+                    err
+                );
+            }
         },
 
         _createTerminal: function () {
@@ -401,6 +439,7 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
             line.set_payment_status('waiting');
 
             try {
+                await this._refreshRuntimeConfig();
                 const connected = await this._discoverAndConnect(line);
                 if (!connected) { return false; }
                 return await this._doPayment(line);

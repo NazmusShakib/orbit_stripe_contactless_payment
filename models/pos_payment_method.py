@@ -57,6 +57,32 @@ class PosPaymentMethod(models.Model):
         return self.env['stripe.terminal.service']
 
     # ------------------------------------------------------------------
+    # RPC: Runtime Config (refresh current settings inside an open POS)
+    # ------------------------------------------------------------------
+
+    @api.model
+    def orbit_stripe_runtime_config(self):
+        """
+        Return the current Stripe Terminal settings for the POS frontend.
+
+        The POS config is normally loaded once when the session starts, so a
+        cashier can otherwise keep using stale test/live mode values after a
+        manager changes Settings in the backend.
+        """
+        if not self.env.user.has_group('point_of_sale.group_pos_user'):
+            raise AccessError(_('Access denied: POS user required.'))
+
+        icp = self.env['ir.config_parameter'].sudo()
+        test_mode_raw = icp.get_param('orbit_stripe_contactless_payment.test_mode', 'True')
+        return {
+            'test_mode': test_mode_raw not in ('False', '0', 'false'),
+            'reader_id': icp.get_param('orbit_stripe_contactless_payment.reader_id', ''),
+            'publishable_key': icp.get_param(
+                'orbit_stripe_contactless_payment.publishable_key', ''
+            ),
+        }
+
+    # ------------------------------------------------------------------
     # RPC: Connection Token (called by POS JS SDK initialisation)
     # ------------------------------------------------------------------
 

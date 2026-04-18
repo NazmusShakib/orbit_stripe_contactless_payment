@@ -58,8 +58,6 @@ class ResConfigSettings(models.TransientModel):
         string='Test Mode',
         help='Enable Stripe test/sandbox mode. '
              'MUST be True in Phase 1 (dev). Disable only when real hardware is ready.',
-        config_parameter=f'{_PARAM_PREFIX}.test_mode',
-        default=True,
     )
 
     # ── Webhook (Phase 2 placeholder) ─────────────────────────────────────────
@@ -80,6 +78,31 @@ class ResConfigSettings(models.TransientModel):
              'Leave blank in Phase 1.',
         config_parameter=f'{_PARAM_PREFIX}.webhook_secret',
     )
+
+    @api.model
+    def get_values(self):
+        """Parse the test-mode parameter explicitly so False stays False."""
+        res = super().get_values()
+        test_mode_raw = self.env['ir.config_parameter'].sudo().get_param(
+            f'{_PARAM_PREFIX}.test_mode', 'True'
+        )
+        res['stripe_test_mode'] = test_mode_raw not in ('False', '0', 'false', '')
+        return res
+
+    def set_values(self):
+        """
+        Persist test mode explicitly.
+
+        Odoo's generic config_parameter handling for booleans stores False by
+        removing the parameter, which clashes with this field's default=True
+        and makes the settings screen show the toggle as enabled again.
+        """
+        super().set_values()
+        self.ensure_one()
+        self.env['ir.config_parameter'].sudo().set_param(
+            f'{_PARAM_PREFIX}.test_mode',
+            'True' if self.stripe_test_mode else 'False',
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # Validation
@@ -107,8 +130,33 @@ class ResConfigSettings(models.TransientModel):
     # Helper: read current config (used by services)
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _sync_stripe_config_parameters(self):
+        """Persist the current form values so follow-up actions see fresh settings."""
+        self.ensure_one()
+        icp = self.env['ir.config_parameter'].sudo()
+        icp.set_param(f'{_PARAM_PREFIX}.secret_key', self.stripe_secret_key or '')
+        icp.set_param(
+            f'{_PARAM_PREFIX}.publishable_key', self.stripe_publishable_key or ''
+        )
+        icp.set_param(
+            f'{_PARAM_PREFIX}.location_id', self.stripe_terminal_location_id or ''
+        )
+        icp.set_param(f'{_PARAM_PREFIX}.reader_id', self.stripe_reader_id or '')
+        icp.set_param(
+            f'{_PARAM_PREFIX}.test_mode', 'True' if self.stripe_test_mode else 'False'
+        )
+        icp.set_param(
+            f'{_PARAM_PREFIX}.tip_enabled', 'True' if self.stripe_tip_enabled else 'False'
+        )
+        icp.set_param(
+            f'{_PARAM_PREFIX}.tip_percentages', self.stripe_tip_percentages or '10,15,20'
+        )
+        icp.set_param(f'{_PARAM_PREFIX}.webhook_secret', self.stripe_webhook_secret or '')
+
     def action_open_setup_wizard(self):
         """Open the Stripe Terminal Setup & Test wizard from Settings."""
+        self.ensure_one()
+        self._sync_stripe_config_parameters()
         return {
             'type': 'ir.actions.act_window',
             'name': 'Stripe Terminal Setup & Test',
@@ -131,6 +179,8 @@ class ResConfigSettings(models.TransientModel):
             'publishable_key': get('publishable_key'),
             'location_id': get('location_id'),
             'reader_id': get('reader_id'),
-            'test_mode': get('test_mode') not in ('False', '0', '', False),
+            'test_mode': self.env['ir.config_parameter'].sudo().get_param(
+                f'{_PARAM_PREFIX}.test_mode', 'True'
+            ) not in ('False', '0', 'false', ''),
             'webhook_secret': get('webhook_secret'),
         }

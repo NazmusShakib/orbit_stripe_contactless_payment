@@ -48,6 +48,9 @@
                                     Enable for testing with <code>sk_test_...</code> keys and simulated readers.
                                     <strong>Disable for live production payments</strong> with real hardware
                                     or Tap to Pay on iPhone/Android. Use <code>sk_live_...</code> key in live mode.
+                                    Click <strong>Save</strong> after changing this toggle.
+                                    If a POS session is already open, reload or reopen the POS so it picks up
+                                    the updated mode everywhere.
                                 </div>
                             </div>
                         </div>
