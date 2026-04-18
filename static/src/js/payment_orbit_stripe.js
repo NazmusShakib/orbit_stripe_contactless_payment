@@ -97,6 +97,16 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
             }
         },
 
+        _getConfiguredReaderId: function () {
+            return (this.payment_method && this.payment_method.orbit_stripe_reader_id)
+                || (this.pos.config && this.pos.config.orbit_stripe_reader_id)
+                || '';
+        },
+
+        _sleep: function (ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        },
+
         _createTerminal: function () {
             if (typeof StripeTerminal === 'undefined') {
                 console.error('[OrbitStripe] StripeTerminal SDK not loaded. Check CDN script tag.');
@@ -241,6 +251,140 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
             return true;
         },
 
+        _processConfiguredReaderPayment: async function (paymentIntentId, line) {
+            let readerResult;
+            const readerId = this._getConfiguredReaderId();
+            line.set_payment_status('waitingCard');
+            console.log(
+                '[OrbitStripe] Using configured reader "%s" via server-side Stripe API.',
+                readerId
+            );
+
+            try {
+                readerResult = await rpc.query({
+                    model: 'pos.payment.method',
+                    method: 'orbit_stripe_process_reader_payment',
+                    args: [[this.payment_method.id], paymentIntentId],
+                    kwargs: { context: this.pos.env.session.user_context },
+                }, { silent: true });
+            } catch (err) {
+                this._showError(this._errorMessage(err), _t('Reader Payment Error'));
+                line.set_payment_status('retry');
+                this._activeIntent = null;
+                return false;
+            }
+
+            if (!readerResult || readerResult.error) {
+                this._showError(
+                    (readerResult && readerResult.error)
+                    || _t('Failed to start payment on the configured Stripe reader.'),
+                    _t('Reader Payment Error')
+                );
+                line.set_payment_status('retry');
+                this._activeIntent = null;
+                return false;
+            }
+
+            return await this._pollConfiguredReaderPayment(paymentIntentId, line);
+        },
+
+        _pollConfiguredReaderPayment: async function (paymentIntentId, line) {
+            const maxAttempts = this._isTestMode() ? 15 : 60;
+            const delayMs = this._isTestMode() ? 1000 : 2000;
+
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                if (this._activeIntent !== paymentIntentId) {
+                    return false;
+                }
+
+                let intentData;
+                try {
+                    intentData = await rpc.query({
+                        model: 'pos.payment.method',
+                        method: 'orbit_stripe_retrieve_payment_intent',
+                        args: [paymentIntentId],
+                        kwargs: { context: this.pos.env.session.user_context },
+                    }, { silent: true });
+                } catch (err) {
+                    this._showError(this._errorMessage(err), _t('Reader Polling Error'));
+                    line.set_payment_status('retry');
+                    this._activeIntent = null;
+                    return false;
+                }
+
+                if (!intentData || intentData.error) {
+                    this._showError(
+                        (intentData && intentData.error)
+                        || _t('Failed to retrieve Stripe payment status.'),
+                        _t('Reader Polling Error')
+                    );
+                    line.set_payment_status('retry');
+                    this._activeIntent = null;
+                    return false;
+                }
+
+                const status = intentData.status || 'unknown';
+                console.log(
+                    '[OrbitStripe] Reader-driven PaymentIntent %s status=%s (attempt %s/%s)',
+                    paymentIntentId, status, attempt + 1, maxAttempts
+                );
+
+                if (status === 'requires_capture') {
+                    line.set_payment_status('waitingCapture');
+                    const captured = await this._captureIntent(paymentIntentId, line);
+                    this._activeIntent = null;
+                    if (!captured) { return false; }
+                    line.set_payment_status('done');
+                    return true;
+                }
+
+                if (status === 'succeeded') {
+                    const autoCapture = this._checkAutoCapture(intentData);
+                    if (autoCapture) {
+                        line.card_type = autoCapture.brand;
+                        line.transaction_id = autoCapture.charge_id;
+                    } else {
+                        line.transaction_id = intentData.id || paymentIntentId;
+                    }
+                    this._activeIntent = null;
+                    line.set_payment_status('done');
+                    return true;
+                }
+
+                if (status === 'canceled') {
+                    this._showError(
+                        _t('The Stripe reader payment was canceled before completion.'),
+                        _t('Reader Payment Cancelled')
+                    );
+                    line.set_payment_status('retry');
+                    this._activeIntent = null;
+                    return false;
+                }
+
+                const lastPaymentError = intentData.last_payment_error;
+                if (lastPaymentError && lastPaymentError.message) {
+                    this._showError(
+                        lastPaymentError.message,
+                        lastPaymentError.code || _t('Card Error')
+                    );
+                    line.set_payment_status('retry');
+                    this._activeIntent = null;
+                    return false;
+                }
+
+                await this._sleep(delayMs);
+            }
+
+            this._showError(
+                _t('Timed out waiting for the configured Stripe reader to finish the payment.\n\n' +
+                   'Check the reader screen and network status, then try again.'),
+                _t('Reader Timeout')
+            );
+            line.set_payment_status('retry');
+            this._activeIntent = null;
+            return false;
+        },
+
         // ===================================================================
         // Payment collection
         // ===================================================================
@@ -271,10 +415,16 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
                 return false;
             }
 
-            const clientSecret    = intentData.client_secret;
             const paymentIntentId = intentData.id;
             this._activeIntent    = paymentIntentId;
             line.transaction_id   = paymentIntentId;
+
+            const configuredReaderId = this._getConfiguredReaderId();
+            if (configuredReaderId) {
+                return await this._processConfiguredReaderPayment(paymentIntentId, line);
+            }
+
+            const clientSecret    = intentData.client_secret;
 
             // Step 2: Collect payment method (customer taps card/phone)
             line.set_payment_status('waitingCard');
@@ -440,8 +590,10 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
 
             try {
                 await this._refreshRuntimeConfig();
-                const connected = await this._discoverAndConnect(line);
-                if (!connected) { return false; }
+                if (!this._getConfiguredReaderId()) {
+                    const connected = await this._discoverAndConnect(line);
+                    if (!connected) { return false; }
+                }
                 return await this._doPayment(line);
             } catch (err) {
                 console.error('[OrbitStripe] send_payment_request error:', err);

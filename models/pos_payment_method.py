@@ -56,6 +56,16 @@ class PosPaymentMethod(models.Model):
     def _get_stripe_service(self):
         return self.env['stripe.terminal.service']
 
+    def _get_resolved_orbit_stripe_reader_id(self):
+        """Resolve payment-method override first, then the global Stripe setting."""
+        self.ensure_one()
+        return (
+            self.orbit_stripe_reader_id
+            or self.env['ir.config_parameter'].sudo().get_param(
+                'orbit_stripe_contactless_payment.reader_id', ''
+            )
+        )
+
     # ------------------------------------------------------------------
     # RPC: Runtime Config (refresh current settings inside an open POS)
     # ------------------------------------------------------------------
@@ -168,6 +178,42 @@ class PosPaymentMethod(models.Model):
             return result
         except Exception as e:
             _logger.exception('orbit_stripe_payment_intent unexpected error')
+            return {'error': str(e)}
+
+    def orbit_stripe_process_reader_payment(self, payment_intent_id):
+        """
+        Instruct the configured Stripe reader to collect a card-present payment.
+
+        This path uses Stripe's server-side reader API instead of the browser
+        SDK, so it works with the configured global/override reader even when
+        the POS device is not on the same local network as the reader.
+        """
+        self.ensure_one()
+        if not self.env.user.has_group('point_of_sale.group_pos_user'):
+            raise AccessError(_('Access denied: POS user required.'))
+
+        reader_id = self._get_resolved_orbit_stripe_reader_id()
+        _logger.info(
+            'POS reader payment request: method=%s reader=%s intent=%s',
+            self.name, reader_id or '(unset)', payment_intent_id
+        )
+        try:
+            return self._get_stripe_service().process_reader_payment(
+                payment_intent_id, reader_id=reader_id
+            )
+        except Exception as e:
+            _logger.exception('orbit_stripe_process_reader_payment unexpected error')
+            return {'error': str(e)}
+
+    @api.model
+    def orbit_stripe_retrieve_payment_intent(self, payment_intent_id):
+        """Retrieve the latest PaymentIntent state for POS polling."""
+        if not self.env.user.has_group('point_of_sale.group_pos_user'):
+            raise AccessError(_('Access denied: POS user required.'))
+        try:
+            return self._get_stripe_service().retrieve_payment_intent(payment_intent_id)
+        except Exception as e:
+            _logger.exception('orbit_stripe_retrieve_payment_intent unexpected error')
             return {'error': str(e)}
 
     # ------------------------------------------------------------------
