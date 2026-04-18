@@ -91,8 +91,8 @@
 
                     <widget name="web_ribbon" title="TEST MODE" bg_color="bg-warning"
                             attrs="{'invisible': [('test_mode', '=', False)]}"/>
-                    <widget name="web_ribbon" title="SIMULATED" bg_color="bg-info"
-                            attrs="{'invisible': [('is_simulated', '=', False)]}"/>
+                    <widget name="web_ribbon" title="LIVE MODE" bg_color="bg-success"
+                            attrs="{'invisible': [('test_mode', '=', True)]}"/>
 
                     <div class="oe_title">
                         <h1>
@@ -264,7 +264,7 @@
         <field name="res_model">stripe.terminal.payment</field>
         <field name="view_mode">form</field>
         <field name="target">current</field>
-        <field name="context">{'default_test_mode': True, 'default_is_simulated': True}</field>
+        <field name="context">{}</field>
     </record>
 
 </odoo>

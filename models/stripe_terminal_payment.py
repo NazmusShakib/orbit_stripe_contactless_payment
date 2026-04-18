@@ -151,15 +151,26 @@ class StripeTerminalPayment(models.Model):
     )
 
     # ── Mode ──────────────────────────────────────────────────────────────────
+    @api.model
+    def _default_test_mode(self):
+        test_mode_raw = self.env['ir.config_parameter'].sudo().get_param(
+            'orbit_stripe_contactless_payment.test_mode', 'True'
+        )
+        return test_mode_raw not in ('False', '0', 'false')
+
+    @api.model
+    def _default_is_simulated(self):
+        return self._default_test_mode()
+
     test_mode = fields.Boolean(
         string='Test Mode',
-        default=True,
+        default=_default_test_mode,
         readonly=True,
         help='Indicates whether this payment was made in Stripe test mode.',
     )
     is_simulated = fields.Boolean(
         string='Simulated Payment',
-        default=True,
+        default=_default_is_simulated,
         readonly=True,
         help='True when the payment was collected via Stripe simulation (not a real reader).',
     )
@@ -441,8 +452,22 @@ class StripeTerminalPayment(models.Model):
         if self.state in ('succeeded', 'cancelled'):
             raise UserError(_('Cannot cancel a succeeded or already cancelled payment.'))
 
+        service = self.env['stripe.terminal.service']
+        reader_id = (
+            self.stripe_reader_id
+            or self.env['ir.config_parameter'].sudo().get_param(
+                'orbit_stripe_contactless_payment.reader_id', ''
+            )
+        )
+        if reader_id:
+            reader_result = service.cancel_reader_action(reader_id=reader_id)
+            if reader_result.get('error'):
+                _logger.warning(
+                    'Could not cancel reader action for backend payment %s on reader %s: %s',
+                    self.name, reader_id, reader_result['error']
+                )
+
         if self.stripe_payment_intent_id:
-            service = self.env['stripe.terminal.service']
             result = service.cancel_payment_intent(
                 payment_intent_id=self.stripe_payment_intent_id,
             )
