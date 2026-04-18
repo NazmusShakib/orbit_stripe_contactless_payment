@@ -26,6 +26,7 @@ _logger = logging.getLogger(__name__)
 class StripeTerminalService(models.AbstractModel):
     _name = 'stripe.terminal.service'
     _description = 'Stripe Terminal Service'
+    _FALSE_PARAM_VALUES = ('False', '0', 'false', '')
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -36,8 +37,30 @@ class StripeTerminalService(models.AbstractModel):
             f'orbit_stripe_contactless_payment.{key}', default
         )
 
+    def _get_bool_param(self, key, default=False):
+        default_value = default
+        if isinstance(default, bool):
+            default_value = 'True' if default else 'False'
+        return self._get_param(key, default_value) not in self._FALSE_PARAM_VALUES
+
+    def _get_terminal_config(self):
+        """Return the current Stripe Terminal configuration with parsed booleans."""
+        return {
+            'secret_key': self._get_param('secret_key', ''),
+            'publishable_key': self._get_param('publishable_key', ''),
+            'location_id': self._get_param('location_id', ''),
+            'reader_id': self._get_param('reader_id', ''),
+            'webhook_secret': self._get_param('webhook_secret', ''),
+            'tip_percentages': self._get_param('tip_percentages', '10,15,20'),
+            'test_mode': self._get_bool_param('test_mode', True),
+            'tip_enabled': self._get_bool_param('tip_enabled', False),
+        }
+
+    def _get_resolved_reader_id(self, reader_id=None):
+        return reader_id or self._get_terminal_config()['reader_id']
+
     def _is_test_mode(self):
-        return self._get_param('test_mode', 'True') not in ('False', '0', 'false')
+        return self._get_bool_param('test_mode', True)
 
     def _get_stripe_client(self):
         """
@@ -55,14 +78,15 @@ class StripeTerminalService(models.AbstractModel):
                 'Or add it to your requirements.txt and rebuild.'
             ))
 
-        secret_key = self._get_param('secret_key', '')
+        config = self._get_terminal_config()
+        secret_key = config['secret_key']
         if not secret_key:
             raise UserError(_(
                 'Stripe Secret Key is not configured.\n'
                 'Go to Settings → Stripe Terminal and enter your API key.'
             ))
 
-        is_test = self._is_test_mode()
+        is_test = config['test_mode']
 
         if is_test and secret_key.startswith('sk_live_'):
             raise UserError(_(
@@ -323,8 +347,7 @@ class StripeTerminalService(models.AbstractModel):
         """
         client = self._get_stripe_client()
 
-        if not reader_id:
-            reader_id = self._get_param('reader_id', '')
+        reader_id = self._get_resolved_reader_id(reader_id)
         if not reader_id:
             return {'error': _(
                 'No Stripe Reader ID configured.\n'
@@ -381,8 +404,7 @@ class StripeTerminalService(models.AbstractModel):
         """
         client = self._get_stripe_client()
 
-        if not reader_id:
-            reader_id = self._get_param('reader_id', '')
+        reader_id = self._get_resolved_reader_id(reader_id)
         if not reader_id:
             return {'success': True, 'status': 'no_reader_configured'}
 

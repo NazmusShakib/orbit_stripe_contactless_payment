@@ -135,9 +135,10 @@ Webhooks give you real-time payment confirmation without polling.
 2. Add products to an order
 3. Click **Payment**
 4. Select **Card / Contactless**
-5. Click **Send** — the reader will prompt the customer
+5. Click **Send** — the configured Stripe reader will start the payment
 6. Customer taps their card, iPhone (Apple Pay), or Android phone (Google Pay)
 7. Payment processes automatically
+8. The payment also appears in **Stripe Terminal Payments** in the backend for audit and refund workflows
 
 ---
 

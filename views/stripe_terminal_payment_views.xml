@@ -23,15 +23,22 @@
                             string="2. Simulate Card Tap"
                             type="object"
                             class="btn-primary"
-                            attrs="{'invisible': [('state', '!=', 'intent_created')]}"
+                            attrs="{'invisible': ['|', ('state', '!=', 'intent_created'), ('test_mode', '=', False)]}"
                             confirm="Simulate a contactless card payment on the configured reader?"/>
 
+                    <button name="action_simulate_payment"
+                            string="2. Start Reader Payment"
+                            type="object"
+                            class="btn-primary"
+                            attrs="{'invisible': ['|', ('state', '!=', 'intent_created'), ('test_mode', '=', True)]}"
+                            confirm="Start a live payment on the configured Stripe reader?"/>
+
                     <button name="action_confirm_payment"
-                            string="3. Confirm Payment"
+                            string="3. Check / Capture Payment"
                             type="object"
                             class="btn-success"
                             attrs="{'invisible': [('state', 'not in', ['intent_created', 'processing'])]}"
-                            confirm="Retrieve and confirm the payment status from Stripe?"/>
+                            confirm="Retrieve the latest status from Stripe and capture the payment if needed?"/>
 
                     <button name="action_cancel_payment"
                             string="Cancel Payment"
@@ -72,7 +79,7 @@
                      attrs="{'invisible': [('state', '!=', 'processing')]}">
                     <i class="fa fa-spinner fa-spin me-1"/>
                     <strong>Processing…</strong>
-                    The reader is collecting the payment. Click "Confirm Payment" to check the result.
+                    The reader is collecting the payment. Use "Check / Capture Payment" to retrieve the latest Stripe result.
                 </div>
 
                 <sheet>
@@ -117,6 +124,13 @@
                         <group string="Mode">
                             <field name="test_mode" readonly="1"/>
                             <field name="is_simulated" readonly="1"/>
+                            <field name="source" readonly="1"/>
+                        </group>
+                        <group string="POS Details"
+                               attrs="{'invisible': [('source', '!=', 'pos')]}">
+                            <field name="pos_config_name" readonly="1"/>
+                            <field name="pos_order_ref" readonly="1"/>
+                            <field name="pos_payment_method_id" readonly="1"/>
                         </group>
                     </group>
 
@@ -174,6 +188,8 @@
                   decoration-info="state == 'intent_created'">
                 <field name="name"/>
                 <field name="description"/>
+                <field name="source" widget="badge"/>
+                <field name="pos_order_ref" optional="hide"/>
                 <field name="amount" widget="monetary" options="{'currency_field': 'currency_id'}"/>
                 <field name="currency_id" invisible="1"/>
                 <field name="state" widget="badge"
@@ -217,6 +233,8 @@
                 <separator/>
                 <filter string="Test Mode" name="filter_test"
                         domain="[('test_mode', '=', True)]"/>
+                <filter string="POS" name="filter_pos"
+                        domain="[('source', '=', 'pos')]"/>
                 <filter string="Simulated" name="filter_simulated"
                         domain="[('is_simulated', '=', True)]"/>
                 <separator/>
@@ -249,8 +267,8 @@
                 Use the <strong>New</strong> button to create a payment, then:
                 <ol>
                     <li>Enter an amount and click <b>Create Payment Intent</b></li>
-                    <li>Click <b>Simulate Card Tap</b> to simulate a contactless payment</li>
-                    <li>Click <b>Confirm Payment</b> to finalise and record the result</li>
+                    <li>Click <b>Simulate Card Tap</b> in test mode or <b>Start Reader Payment</b> in live mode</li>
+                    <li>Click <b>Check / Capture Payment</b> to finalise and record the result</li>
                 </ol>
             </p>
         </field>

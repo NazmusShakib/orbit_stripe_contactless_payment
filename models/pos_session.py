@@ -24,18 +24,11 @@ class PosSession(models.Model):
             this.pos.config.orbit_stripe_publishable_key
         """
         result = super()._get_pos_ui_pos_config(params)
-        ICP = self.env['ir.config_parameter'].sudo()
+        config = self.env['stripe.terminal.service']._get_terminal_config()
 
-        test_mode_raw = ICP.get_param('orbit_stripe_contactless_payment.test_mode', 'True')
-        result['orbit_stripe_test_mode'] = test_mode_raw not in ('False', '0', 'false')
-        result['orbit_stripe_reader_id'] = ICP.get_param(
-            'orbit_stripe_contactless_payment.reader_id', '')
-        result['orbit_stripe_publishable_key'] = ICP.get_param(
-            'orbit_stripe_contactless_payment.publishable_key', '')
-        # Tip / gratuity config
-        result['orbit_stripe_tip_enabled'] = ICP.get_param(
-            'orbit_stripe_contactless_payment.tip_enabled', 'False'
-        ) in ('True', '1', 'true')
-        result['orbit_stripe_tip_percentages'] = ICP.get_param(
-            'orbit_stripe_contactless_payment.tip_percentages', '10,15,20')
+        result['orbit_stripe_test_mode'] = config['test_mode']
+        result['orbit_stripe_reader_id'] = config['reader_id']
+        result['orbit_stripe_publishable_key'] = config['publishable_key']
+        result['orbit_stripe_tip_enabled'] = config['tip_enabled']
+        result['orbit_stripe_tip_percentages'] = config['tip_percentages']
         return result

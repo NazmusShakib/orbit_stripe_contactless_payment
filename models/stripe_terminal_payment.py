@@ -94,6 +94,34 @@ class StripeTerminalPayment(models.Model):
         copy=False,
         help='Any error message returned by Stripe.',
     )
+    source = fields.Selection(
+        selection=[
+            ('backend', 'Backend'),
+            ('pos', 'POS'),
+        ],
+        string='Source',
+        default='backend',
+        readonly=True,
+        tracking=True,
+    )
+    pos_payment_method_id = fields.Many2one(
+        'pos.payment.method',
+        string='POS Payment Method',
+        readonly=True,
+        copy=False,
+    )
+    pos_config_name = fields.Char(
+        string='POS Configuration',
+        readonly=True,
+        copy=False,
+        tracking=True,
+    )
+    pos_order_ref = fields.Char(
+        string='POS Order Reference',
+        readonly=True,
+        copy=False,
+        tracking=True,
+    )
 
     # ── Status ────────────────────────────────────────────────────────────────
     state = fields.Selection(
@@ -153,10 +181,7 @@ class StripeTerminalPayment(models.Model):
     # ── Mode ──────────────────────────────────────────────────────────────────
     @api.model
     def _default_test_mode(self):
-        test_mode_raw = self.env['ir.config_parameter'].sudo().get_param(
-            'orbit_stripe_contactless_payment.test_mode', 'True'
-        )
-        return test_mode_raw not in ('False', '0', 'false')
+        return self.env['stripe.terminal.service']._is_test_mode()
 
     @api.model
     def _default_is_simulated(self):
@@ -239,6 +264,123 @@ class StripeTerminalPayment(models.Model):
                 ) or _('New')
         return super().create(vals_list)
 
+    @api.model
+    def get_by_payment_intent(self, payment_intent_id):
+        return self.sudo().search([
+            ('stripe_payment_intent_id', '=', payment_intent_id)
+        ], limit=1)
+
+    @api.model
+    def _build_pos_description(self, payment_method, pos_payload=None):
+        pos_payload = pos_payload or {}
+        parts = [
+            pos_payload.get('order_name') or pos_payload.get('order_uid'),
+            pos_payload.get('pos_config_name'),
+            payment_method.name if payment_method else '',
+        ]
+        parts = [part for part in parts if part]
+        return ' / '.join(parts) or _('POS Stripe Terminal Payment')
+
+    @api.model
+    def create_or_update_from_pos_payment_intent(
+        self, payment_method, amount, currency_rec, intent_data, pos_payload=None, reader_id=None
+    ):
+        pos_payload = pos_payload or {}
+        record = self.get_by_payment_intent(intent_data.get('id'))
+        vals = {
+            'description': self._build_pos_description(payment_method, pos_payload=pos_payload),
+            'amount': amount,
+            'currency_id': currency_rec.id,
+            'stripe_payment_intent_id': intent_data.get('id'),
+            'stripe_client_secret': intent_data.get('client_secret'),
+            'stripe_reader_id': reader_id or False,
+            'state': 'intent_created',
+            'intent_created_at': fields.Datetime.now(),
+            'payment_completed_at': False,
+            'stripe_error_message': False,
+            'test_mode': self._default_test_mode(),
+            'is_simulated': self._default_is_simulated(),
+            'source': 'pos',
+            'pos_payment_method_id': payment_method.id if payment_method else False,
+            'pos_config_name': pos_payload.get('pos_config_name') or False,
+            'pos_order_ref': (
+                pos_payload.get('order_name')
+                or pos_payload.get('order_uid')
+                or False
+            ),
+            'company_id': (payment_method.company_id or self.env.company).id,
+            'user_id': self.env.user.id,
+        }
+        if record:
+            record.write(vals)
+        else:
+            record = self.sudo().create(vals)
+            record.message_post(body=_(
+                'POS payment created from <b>%s</b> using <b>%s</b>.<br/>'
+                'PaymentIntent: <b>%s</b>'
+            ) % (
+                pos_payload.get('pos_config_name') or 'POS',
+                payment_method.name if payment_method else 'Stripe Terminal',
+                intent_data.get('id') or '—',
+            ))
+        return record
+
+    def apply_pos_status_update(
+        self, state=None, reader_id=None, charge_id=None, error_message=None, note=None,
+        payment_completed=False
+    ):
+        self.ensure_one()
+        vals = {}
+        if state:
+            vals['state'] = state
+        if reader_id:
+            vals['stripe_reader_id'] = reader_id
+        if charge_id:
+            vals['stripe_charge_id'] = charge_id
+        if error_message is not None:
+            vals['stripe_error_message'] = error_message
+        if payment_completed:
+            vals['payment_completed_at'] = fields.Datetime.now()
+        if vals:
+            self.sudo().write(vals)
+        if note:
+            self.message_post(body=note)
+        return self
+
+    def register_external_refund(self, refund_data, refund_amount=None,
+                                 reason='requested_by_customer', note=''):
+        """Update this record after a refund already succeeded elsewhere."""
+        self.ensure_one()
+
+        refund_amount_float = (refund_data.get('amount') or 0) / 100.0
+        total_refunded = self.refund_amount + refund_amount_float
+        is_full_refund = abs(total_refunded - self.amount) < 0.01
+
+        self.write({
+            'stripe_refund_id': refund_data.get('id'),
+            'refund_amount': total_refunded,
+            'refund_reason': reason,
+            'refund_date': fields.Datetime.now(),
+            'refund_note': note or self.refund_note,
+            'state': 'refunded' if is_full_refund else 'partially_refunded',
+        })
+
+        refund_label = 'FULL' if is_full_refund else 'PARTIAL'
+        self.message_post(body=_(
+            '💸 %s REFUND recorded from POS: <b>%s %s</b>\n'
+            'Stripe Refund ID: <b>%s</b>\n'
+            'Reason: %s\n'
+            'Note: %s'
+        ) % (
+            refund_label,
+            self.currency_id.symbol or '£',
+            refund_amount_float,
+            refund_data.get('id'),
+            reason,
+            note or '—',
+        ))
+        return self
+
     # ─────────────────────────────────────────────────────────────────────────
     # Business Logic / Action Methods
     # ─────────────────────────────────────────────────────────────────────────
@@ -273,11 +415,7 @@ class StripeTerminalPayment(models.Model):
             self.message_post(body=_('❌ PaymentIntent creation failed: %s') % result['error'])
             raise UserError(_('Stripe error: %s') % result['error'])
 
-        # Determine if we are in test mode from config
-        test_mode_param = self.env['ir.config_parameter'].sudo().get_param(
-            'orbit_stripe_contactless_payment.test_mode', 'True'
-        )
-        is_test_mode = test_mode_param not in ('False', '0', 'false')
+        is_test_mode = service._is_test_mode()
 
         self.write({
             'stripe_payment_intent_id': result['id'],
@@ -312,17 +450,9 @@ class StripeTerminalPayment(models.Model):
         if not self.stripe_payment_intent_id:
             raise UserError(_('No Stripe PaymentIntent ID found.'))
 
-        # Retrieve configured reader ID from settings
-        reader_id = self.env['ir.config_parameter'].sudo().get_param(
-            'orbit_stripe_contactless_payment.reader_id', ''
-        )
-
-        test_mode_param = self.env['ir.config_parameter'].sudo().get_param(
-            'orbit_stripe_contactless_payment.test_mode', 'True'
-        )
-        is_test_mode = test_mode_param not in ('False', '0', 'false')
-
         service = self.env['stripe.terminal.service']
+        reader_id = service._get_resolved_reader_id(self.stripe_reader_id)
+        is_test_mode = service._is_test_mode()
         result = service.process_reader_payment(
             payment_intent_id=self.stripe_payment_intent_id,
             reader_id=reader_id,
@@ -453,12 +583,7 @@ class StripeTerminalPayment(models.Model):
             raise UserError(_('Cannot cancel a succeeded or already cancelled payment.'))
 
         service = self.env['stripe.terminal.service']
-        reader_id = (
-            self.stripe_reader_id
-            or self.env['ir.config_parameter'].sudo().get_param(
-                'orbit_stripe_contactless_payment.reader_id', ''
-            )
-        )
+        reader_id = service._get_resolved_reader_id(self.stripe_reader_id)
         if reader_id:
             reader_result = service.cancel_reader_action(reader_id=reader_id)
             if reader_result.get('error'):
@@ -607,11 +732,14 @@ class StripeTerminalPayment(models.Model):
         }
 
     def action_open_stripe_dashboard(self):
-        """Open the Stripe Dashboard for this PaymentIntent (test mode URL)."""
+        """Open the Stripe Dashboard for this PaymentIntent."""
         self.ensure_one()
         if not self.stripe_payment_intent_id:
             raise UserError(_('No Stripe PaymentIntent ID available.'))
-        url = 'https://dashboard.stripe.com/test/payments/%s' % self.stripe_payment_intent_id
+        if self.test_mode:
+            url = 'https://dashboard.stripe.com/test/payments/%s' % self.stripe_payment_intent_id
+        else:
+            url = 'https://dashboard.stripe.com/payments/%s' % self.stripe_payment_intent_id
         return {
             'type': 'ir.actions.act_url',
             'url': url,

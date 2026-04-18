@@ -265,7 +265,7 @@ Stripe provides simulated readers that behave exactly like real hardware.
 4. Click **Card / Contactless** (or your payment method name)
 5. Enter the amount (or it auto-fills)
 6. Click **Send / Validate**
-7. The reader prompts the customer to tap
+7. The configured Stripe reader starts collecting the payment
 
 **Customer taps one of:**
 
@@ -276,6 +276,7 @@ Stripe provides simulated readers that behave exactly like real hardware.
 
 8. Payment processes automatically
 9. POS shows payment as done
+10. A backend **Stripe Terminal Payment** record is also created for the POS payment intent, making it easier to audit and refund later
 
 ### In the Backend (Stripe Terminal Payments menu)
 
@@ -283,8 +284,8 @@ Stripe provides simulated readers that behave exactly like real hardware.
 2. Click **New**
 3. Enter amount and description
 4. Click **Create Payment Intent**
-5. Click **Simulate/Collect Payment** (test) or **Collect Payment** (live)
-6. Click **Confirm Payment**
+5. Click **Simulate Card Tap** (test) or **Start Reader Payment** (live)
+6. Click **Check / Capture Payment**
 
 ---
 

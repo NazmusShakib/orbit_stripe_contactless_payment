@@ -1,7 +1,7 @@
 # Stripe Terminal Payment — Odoo Module
 
-> **Phase 1: Developer / Test / Simulation Mode**  
-> No real hardware required. Uses Stripe's test environment and simulated readers.
+> Supports both **test/simulated** and **live** Stripe Terminal payments.  
+> In POS, a configured `reader_id` can be driven server-side, and POS payments are mirrored into backend Stripe Terminal payment records for auditability.
 
 ---
 
@@ -13,10 +13,11 @@ It provides:
 
 - Admin settings for Stripe API credentials
 - PaymentIntent creation via Stripe API
-- Simulated card-present payment collection
+- Test-mode simulated reader payments and live reader payments
 - Payment confirmation and status tracking
 - Full audit log with chatter history in Odoo
 - A setup wizard to create simulated readers without leaving Odoo
+- Backend `Stripe Terminal Payments` records for POS payment intents, captures, cancellations, and refunds
 
 ---
 
@@ -237,10 +238,10 @@ Additional Notes:
     ▼ [Create Payment Intent]
   Intent Created
     │
-    ▼ [Simulate Card Tap]
+    ▼ [Simulate Card Tap / Start Reader Payment]
   Processing
     │
-    ▼ [Confirm Payment]
+    ▼ [Check / Capture Payment]
   Succeeded or Failed
 
   Any non-succeeded state can be → Cancelled
@@ -261,10 +262,10 @@ Additional Notes:
 3. Click **1. Create Payment Intent**
    - Record shows: `stripe_payment_intent_id = pi_xxxxx`
    - State → **Intent Created**
-4. Click **2. Simulate Card Tap**
+4. Click **2. Simulate Card Tap** in test mode, or **2. Start Reader Payment** in live mode
    - State → **Processing**
-   - Chatter: "Payment simulation initiated"
-5. Click **3. Confirm Payment**
+   - Chatter records whether the payment was simulated or sent to a live reader
+5. Click **3. Check / Capture Payment**
    - State → **Succeeded** (green banner)
    - `stripe_charge_id = ch_xxxxx` visible on record
 

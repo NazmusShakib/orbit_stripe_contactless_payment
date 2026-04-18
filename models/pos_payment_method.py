@@ -56,15 +56,28 @@ class PosPaymentMethod(models.Model):
     def _get_stripe_service(self):
         return self.env['stripe.terminal.service']
 
+    def _get_terminal_config(self):
+        return self._get_stripe_service()._get_terminal_config()
+
     def _get_resolved_orbit_stripe_reader_id(self):
         """Resolve payment-method override first, then the global Stripe setting."""
         self.ensure_one()
-        return (
-            self.orbit_stripe_reader_id
-            or self.env['ir.config_parameter'].sudo().get_param(
-                'orbit_stripe_contactless_payment.reader_id', ''
-            )
-        )
+        return self._get_stripe_service()._get_resolved_reader_id(self.orbit_stripe_reader_id)
+
+    def _format_pos_log_context(self, pos_payload=None, payment_intent_id=None, reader_id=None):
+        pos_payload = pos_payload or {}
+        details = [
+            ('pos', pos_payload.get('pos_config_name')),
+            ('order', pos_payload.get('order_name') or pos_payload.get('order_uid')),
+            ('method', self.name if len(self) == 1 else pos_payload.get('payment_method_name')),
+            ('reader', reader_id),
+            ('pi', payment_intent_id),
+        ]
+        parts = [f'{label}={value}' for label, value in details if value]
+        return ' | '.join(parts)
+
+    def _get_pos_payment_record(self, payment_intent_id):
+        return self.env['stripe.terminal.payment'].get_by_payment_intent(payment_intent_id)
 
     # ------------------------------------------------------------------
     # RPC: Runtime Config (refresh current settings inside an open POS)
@@ -82,14 +95,11 @@ class PosPaymentMethod(models.Model):
         if not self.env.user.has_group('point_of_sale.group_pos_user'):
             raise AccessError(_('Access denied: POS user required.'))
 
-        icp = self.env['ir.config_parameter'].sudo()
-        test_mode_raw = icp.get_param('orbit_stripe_contactless_payment.test_mode', 'True')
+        config = self._get_terminal_config()
         return {
-            'test_mode': test_mode_raw not in ('False', '0', 'false'),
-            'reader_id': icp.get_param('orbit_stripe_contactless_payment.reader_id', ''),
-            'publishable_key': icp.get_param(
-                'orbit_stripe_contactless_payment.publishable_key', ''
-            ),
+            'test_mode': config['test_mode'],
+            'reader_id': config['reader_id'],
+            'publishable_key': config['publishable_key'],
         }
 
     # ------------------------------------------------------------------
@@ -119,7 +129,7 @@ class PosPaymentMethod(models.Model):
     # RPC: Create PaymentIntent (called when cashier hits "Send")
     # ------------------------------------------------------------------
 
-    def orbit_stripe_payment_intent(self, amount):
+    def orbit_stripe_payment_intent(self, amount, pos_payload=None):
         """
         Create a Stripe PaymentIntent for a POS card-present payment.
 
@@ -151,9 +161,18 @@ class PosPaymentMethod(models.Model):
         currency_rounding = currency_rec.rounding if currency_rec and currency_rec.rounding else 0.01
         amount_int = int(round(amount / currency_rounding))
 
+        log_context = self._format_pos_log_context(
+            pos_payload=pos_payload,
+            reader_id=self._get_resolved_orbit_stripe_reader_id(),
+        )
         _logger.info(
-            'POS PaymentIntent: method=%s amount=%.2f %s rounding=%s → %s smallest units',
-            self.name, amount, currency_code, currency_rounding, amount_int
+            'POS PaymentIntent: amount=%.2f %s rounding=%s → %s smallest units%s%s',
+            amount,
+            currency_code,
+            currency_rounding,
+            amount_int,
+            ' | ' if log_context else '',
+            log_context,
         )
 
         try:
@@ -172,15 +191,42 @@ class PosPaymentMethod(models.Model):
                     'odoo_user': self.env.user.name,
                 },
             }
+            pos_payload = pos_payload or {}
+            if pos_payload.get('pos_config_name'):
+                params['metadata']['odoo_pos_config'] = pos_payload['pos_config_name']
+            if pos_payload.get('order_name') or pos_payload.get('order_uid'):
+                params['metadata']['odoo_pos_order'] = (
+                    pos_payload.get('order_name') or pos_payload.get('order_uid')
+                )
             result = svc._safe_call(client.v1.payment_intents.create, params)
             if result.get('error'):
-                _logger.error('orbit_stripe_payment_intent error: %s', result['error'])
+                _logger.error(
+                    'orbit_stripe_payment_intent error: %s%s%s',
+                    result['error'],
+                    ' | ' if log_context else '',
+                    log_context,
+                )
+            else:
+                payment_record = self.env['stripe.terminal.payment'].create_or_update_from_pos_payment_intent(
+                    self,
+                    amount,
+                    currency_rec,
+                    result,
+                    pos_payload=pos_payload,
+                    reader_id=self._get_resolved_orbit_stripe_reader_id(),
+                )
+                _logger.info(
+                    'POS backend audit record prepared: %s%s%s',
+                    payment_record.name,
+                    ' | ' if log_context else '',
+                    log_context,
+                )
             return result
         except Exception as e:
             _logger.exception('orbit_stripe_payment_intent unexpected error')
             return {'error': str(e)}
 
-    def orbit_stripe_process_reader_payment(self, payment_intent_id):
+    def orbit_stripe_process_reader_payment(self, payment_intent_id, pos_payload=None):
         """
         Instruct the configured Stripe reader to collect a card-present payment.
 
@@ -193,20 +239,45 @@ class PosPaymentMethod(models.Model):
             raise AccessError(_('Access denied: POS user required.'))
 
         reader_id = self._get_resolved_orbit_stripe_reader_id()
+        log_context = self._format_pos_log_context(
+            pos_payload=pos_payload,
+            payment_intent_id=payment_intent_id,
+            reader_id=reader_id,
+        )
         _logger.info(
-            'POS reader payment request: method=%s reader=%s intent=%s',
-            self.name, reader_id or '(unset)', payment_intent_id
+            'POS reader payment request%s%s',
+            ': ' if log_context else '',
+            log_context,
         )
         try:
-            return self._get_stripe_service().process_reader_payment(
+            result = self._get_stripe_service().process_reader_payment(
                 payment_intent_id, reader_id=reader_id
             )
+            payment_record = self._get_pos_payment_record(payment_intent_id)
+            if result.get('error'):
+                if payment_record:
+                    payment_record.apply_pos_status_update(
+                        state='failed',
+                        reader_id=reader_id,
+                        error_message=result['error'],
+                        note=_('❌ POS reader payment failed: %s') % result['error'],
+                    )
+            elif payment_record:
+                payment_record.apply_pos_status_update(
+                    state='processing',
+                    reader_id=result.get('reader_id') or reader_id,
+                    error_message=False,
+                    note=_('📱 POS reader payment started from %s.') % (
+                        (pos_payload or {}).get('pos_config_name') or 'POS'
+                    ),
+                )
+            return result
         except Exception as e:
             _logger.exception('orbit_stripe_process_reader_payment unexpected error')
             return {'error': str(e)}
 
     @api.model
-    def orbit_stripe_retrieve_payment_intent(self, payment_intent_id):
+    def orbit_stripe_retrieve_payment_intent(self, payment_intent_id, pos_payload=None):
         """Retrieve the latest PaymentIntent state for POS polling."""
         if not self.env.user.has_group('point_of_sale.group_pos_user'):
             raise AccessError(_('Access denied: POS user required.'))
@@ -216,16 +287,18 @@ class PosPaymentMethod(models.Model):
             _logger.exception('orbit_stripe_retrieve_payment_intent unexpected error')
             return {'error': str(e)}
 
-    def orbit_stripe_cancel_reader_action(self):
+    def orbit_stripe_cancel_reader_action(self, pos_payload=None):
         """Cancel the active action on the configured Stripe reader."""
         self.ensure_one()
         if not self.env.user.has_group('point_of_sale.group_pos_user'):
             raise AccessError(_('Access denied: POS user required.'))
 
         reader_id = self._get_resolved_orbit_stripe_reader_id()
+        log_context = self._format_pos_log_context(pos_payload=pos_payload, reader_id=reader_id)
         _logger.info(
-            'POS reader cancel request: method=%s reader=%s',
-            self.name, reader_id or '(unset)'
+            'POS reader cancel request%s%s',
+            ': ' if log_context else '',
+            log_context,
         )
         try:
             return self._get_stripe_service().cancel_reader_action(reader_id=reader_id)
@@ -238,7 +311,7 @@ class PosPaymentMethod(models.Model):
     # ------------------------------------------------------------------
 
     @api.model
-    def orbit_stripe_capture_payment(self, payment_intent_id, amount=None):
+    def orbit_stripe_capture_payment(self, payment_intent_id, amount=None, pos_payload=None):
         """
         Capture a Stripe PaymentIntent after the card has been tapped.
 
@@ -261,11 +334,32 @@ class PosPaymentMethod(models.Model):
             currency_rounding = currency_rec.rounding if currency_rec and currency_rec.rounding else 0.01
             amount_int = int(round(amount / currency_rounding))
 
-        _logger.info('Capturing POS PaymentIntent: %s (amount_int=%s)', payment_intent_id, amount_int)
+        log_context = self._format_pos_log_context(
+            pos_payload=pos_payload,
+            payment_intent_id=payment_intent_id,
+        )
+        _logger.info(
+            'Capturing POS PaymentIntent: amount_int=%s%s%s',
+            amount_int,
+            ' | ' if log_context else '',
+            log_context,
+        )
         try:
             result = svc.capture_payment_intent(payment_intent_id, amount_to_capture=amount_int)
             if result.get('error'):
-                _logger.error('Capture failed: %s', result['error'])
+                _logger.error(
+                    'Capture failed: %s%s%s',
+                    result['error'],
+                    ' | ' if log_context else '',
+                    log_context,
+                )
+                payment_record = self._get_pos_payment_record(payment_intent_id)
+                if payment_record:
+                    payment_record.apply_pos_status_update(
+                        state='failed',
+                        error_message=result['error'],
+                        note=_('❌ POS capture failed: %s') % result['error'],
+                    )
                 return result
 
             # Newer Stripe API returns latest_charge (charge ID string), not charges dict
@@ -286,8 +380,22 @@ class PosPaymentMethod(models.Model):
                 except Exception as ce:
                     _logger.warning('Could not retrieve charge details (non-fatal): %s', ce)
 
-            _logger.info('POS PaymentIntent %s captured successfully. Status: %s',
-                         payment_intent_id, result.get('status'))
+            payment_record = self._get_pos_payment_record(payment_intent_id)
+            if payment_record:
+                payment_record.apply_pos_status_update(
+                    state='succeeded',
+                    charge_id=latest_charge_id,
+                    error_message=False,
+                    payment_completed=True,
+                    note=_('✅ POS payment captured successfully.'),
+                )
+
+            _logger.info(
+                'POS PaymentIntent captured successfully: status=%s%s%s',
+                result.get('status'),
+                ' | ' if log_context else '',
+                log_context,
+            )
             return result
         except Exception as e:
             _logger.exception('orbit_stripe_capture_payment unexpected error')
@@ -298,7 +406,7 @@ class PosPaymentMethod(models.Model):
     # ------------------------------------------------------------------
 
     @api.model
-    def orbit_stripe_cancel_payment(self, payment_intent_id):
+    def orbit_stripe_cancel_payment(self, payment_intent_id, pos_payload=None):
         """
         Cancel a Stripe PaymentIntent.
 
@@ -310,7 +418,25 @@ class PosPaymentMethod(models.Model):
         if not self.env.user.has_group('point_of_sale.group_pos_user'):
             raise AccessError(_('Access denied: POS user required.'))
         try:
-            return self._get_stripe_service().cancel_payment_intent(payment_intent_id)
+            log_context = self._format_pos_log_context(
+                pos_payload=pos_payload,
+                payment_intent_id=payment_intent_id,
+            )
+            _logger.info(
+                'POS cancel request%s%s',
+                ': ' if log_context else '',
+                log_context,
+            )
+            result = self._get_stripe_service().cancel_payment_intent(payment_intent_id)
+            if not result.get('error'):
+                payment_record = self._get_pos_payment_record(payment_intent_id)
+                if payment_record:
+                    payment_record.apply_pos_status_update(
+                        state='cancelled',
+                        error_message=False,
+                        note=_('🚫 POS payment cancelled.'),
+                    )
+            return result
         except Exception as e:
             _logger.exception('orbit_stripe_cancel_payment unexpected error')
             return {'error': str(e)}
@@ -321,7 +447,7 @@ class PosPaymentMethod(models.Model):
 
     @api.model
     def orbit_stripe_refund_payment(self, payment_intent_id, amount=None,
-                                    reason='requested_by_customer'):
+                                    reason='requested_by_customer', pos_payload=None):
         """
         Issue a full or partial refund for a captured POS payment.
 
@@ -341,8 +467,17 @@ class PosPaymentMethod(models.Model):
         if not self.env.user.has_group('point_of_sale.group_pos_user'):
             raise AccessError(_('Access denied: POS user required.'))
 
-        _logger.info('POS refund request: pi=%s amount=%s reason=%s',
-                     payment_intent_id, amount, reason)
+        log_context = self._format_pos_log_context(
+            pos_payload=pos_payload,
+            payment_intent_id=payment_intent_id,
+        )
+        _logger.info(
+            'POS refund request: amount=%s reason=%s%s%s',
+            amount,
+            reason,
+            ' | ' if log_context else '',
+            log_context,
+        )
 
         svc = self._get_stripe_service()
         amount_int = None
@@ -362,18 +497,28 @@ class PosPaymentMethod(models.Model):
                 },
             )
             if result.get('error'):
-                _logger.error('POS refund failed: %s', result['error'])
+                _logger.error(
+                    'POS refund failed: %s%s%s',
+                    result['error'],
+                    ' | ' if log_context else '',
+                    log_context,
+                )
                 return result
 
             refund_amount_float = (result.get('amount') or 0) / 100.0
-            _logger.info('POS refund successful: %s £%.2f', result.get('id'), refund_amount_float)
+            _logger.info(
+                'POS refund successful: %s £%.2f%s%s',
+                result.get('id'),
+                refund_amount_float,
+                ' | ' if log_context else '',
+                log_context,
+            )
 
             # Also update the backend StripeTerminalPayment record if it exists
-            payment_rec = self.env['stripe.terminal.payment'].sudo().search([
-                ('stripe_payment_intent_id', '=', payment_intent_id)
-            ], limit=1)
+            payment_rec = self._get_pos_payment_record(payment_intent_id)
             if payment_rec:
-                payment_rec.action_refund_payment(
+                payment_rec.register_external_refund(
+                    refund_data=result,
                     refund_amount=amount,
                     reason=reason,
                     note='Refund initiated from POS',

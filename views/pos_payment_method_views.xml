@@ -32,6 +32,7 @@
                             <strong>Reader ID:</strong> Leave blank to use the global reader from
                             <em>Settings &#8594; Stripe Terminal</em>, or enter a specific
                             <code>tmr_...</code> ID to assign a dedicated reader to this payment method.
+                            When a reader ID is configured, POS will prefer that configured reader directly.
                             <br/>
                             <strong>Test mode:</strong> Configure API keys and switch between test/live
                             in <em>Settings &#8594; Stripe Terminal</em>.

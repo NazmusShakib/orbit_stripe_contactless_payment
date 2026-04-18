@@ -171,16 +171,12 @@ class ResConfigSettings(models.TransientModel):
         Returns a dict with all Stripe configuration values from ir.config_parameter.
         Use this helper from services/controllers instead of reading params directly.
         """
-        get = lambda key: self.env['ir.config_parameter'].sudo().get_param(
-            f'{_PARAM_PREFIX}.{key}', ''
-        )
+        config = self.env['stripe.terminal.service']._get_terminal_config()
         return {
-            'secret_key': get('secret_key'),
-            'publishable_key': get('publishable_key'),
-            'location_id': get('location_id'),
-            'reader_id': get('reader_id'),
-            'test_mode': self.env['ir.config_parameter'].sudo().get_param(
-                f'{_PARAM_PREFIX}.test_mode', 'True'
-            ) not in ('False', '0', 'false', ''),
-            'webhook_secret': get('webhook_secret'),
+            'secret_key': config['secret_key'],
+            'publishable_key': config['publishable_key'],
+            'location_id': config['location_id'],
+            'reader_id': config['reader_id'],
+            'test_mode': config['test_mode'],
+            'webhook_secret': config['webhook_secret'],
         }

@@ -107,6 +107,18 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
             return new Promise(resolve => setTimeout(resolve, ms));
         },
 
+        _buildPosPayload: function (line) {
+            const order = this.pos.get_order();
+            return {
+                pos_config_name: (this.pos.config && this.pos.config.name) || '',
+                order_name: (order && order.name) || '',
+                order_uid: (order && order.uid) || '',
+                payment_method_name: (this.payment_method && this.payment_method.name) || '',
+                payment_line_cid: (line && line.cid) || '',
+                configured_reader_id: this._getConfiguredReaderId(),
+            };
+        },
+
         _createTerminal: function () {
             if (typeof StripeTerminal === 'undefined') {
                 console.error('[OrbitStripe] StripeTerminal SDK not loaded. Check CDN script tag.');
@@ -254,17 +266,20 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
         _processConfiguredReaderPayment: async function (paymentIntentId, line) {
             let readerResult;
             const readerId = this._getConfiguredReaderId();
+            const posPayload = this._buildPosPayload(line);
             line.set_payment_status('waitingCard');
             console.log(
-                '[OrbitStripe] Using configured reader "%s" via server-side Stripe API.',
-                readerId
+                '[OrbitStripe] Using configured reader "%s" via server-side Stripe API. pos=%s order=%s',
+                readerId,
+                posPayload.pos_config_name || '(unknown)',
+                posPayload.order_name || posPayload.order_uid || '(unknown)'
             );
 
             try {
                 readerResult = await rpc.query({
                     model: 'pos.payment.method',
                     method: 'orbit_stripe_process_reader_payment',
-                    args: [[this.payment_method.id], paymentIntentId],
+                    args: [[this.payment_method.id], paymentIntentId, posPayload],
                     kwargs: { context: this.pos.env.session.user_context },
                 }, { silent: true });
             } catch (err) {
@@ -289,6 +304,7 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
         },
 
         _pollConfiguredReaderPayment: async function (paymentIntentId, line) {
+            const posPayload = this._buildPosPayload(line);
             const maxAttempts = this._isTestMode() ? 15 : 60;
             const delayMs = this._isTestMode() ? 1000 : 2000;
 
@@ -302,7 +318,7 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
                     intentData = await rpc.query({
                         model: 'pos.payment.method',
                         method: 'orbit_stripe_retrieve_payment_intent',
-                        args: [paymentIntentId],
+                        args: [paymentIntentId, posPayload],
                         kwargs: { context: this.pos.env.session.user_context },
                     }, { silent: true });
                 } catch (err) {
@@ -392,12 +408,13 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
         _doPayment: async function (line) {
             // Step 1: Create PaymentIntent server-side
             const amount = line.amount;
+            const posPayload = this._buildPosPayload(line);
             let intentData;
             try {
                 intentData = await rpc.query({
                     model:  'pos.payment.method',
                     method: 'orbit_stripe_payment_intent',
-                    args:   [[this.payment_method.id], amount],
+                    args:   [[this.payment_method.id], amount, posPayload],
                     kwargs: { context: this.pos.env.session.user_context },
                 }, { silent: true });
             } catch (err) {
@@ -488,12 +505,13 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
         },
 
         _captureIntent: async function (paymentIntentId, line) {
+            const posPayload = this._buildPosPayload(line);
             let captureData;
             try {
                 captureData = await rpc.query({
                     model:  'pos.payment.method',
                     method: 'orbit_stripe_capture_payment',
-                    args:   [paymentIntentId],
+                    args:   [paymentIntentId, null, posPayload],
                     kwargs: { context: this.pos.env.session.user_context },
                 }, { silent: true });
             } catch (err) {
@@ -586,10 +604,19 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
         send_payment_request: async function (cid) {
             await this._super(...arguments);
             const line = this.pos.get_order().selected_paymentline;
+            const posPayload = this._buildPosPayload(line);
             line.set_payment_status('waiting');
 
             try {
                 await this._refreshRuntimeConfig();
+                console.log(
+                    '[OrbitStripe] Payment request started. pos=%s order=%s method=%s reader=%s testMode=%s',
+                    posPayload.pos_config_name || '(unknown)',
+                    posPayload.order_name || posPayload.order_uid || '(unknown)',
+                    posPayload.payment_method_name || '(unknown)',
+                    posPayload.configured_reader_id || '(auto-sdk)',
+                    this._isTestMode()
+                );
                 if (!this._getConfiguredReaderId()) {
                     const connected = await this._discoverAndConnect(line);
                     if (!connected) { return false; }
@@ -606,6 +633,7 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
         send_payment_cancel: async function (order, cid) {
             this._super(...arguments);
             const line = this.pos.get_order().selected_paymentline;
+            const posPayload = this._buildPosPayload(line);
             const configuredReaderId = this._getConfiguredReaderId();
 
             // Cancel SDK collection
@@ -623,7 +651,7 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
                 rpc.query({
                     model: 'pos.payment.method',
                     method: 'orbit_stripe_cancel_reader_action',
-                    args: [[this.payment_method.id]],
+                    args: [[this.payment_method.id], posPayload],
                     kwargs: { context: this.pos.env.session.user_context },
                 }, { silent: true }).catch(e =>
                     console.warn('[OrbitStripe] Cancel reader action failed (non-fatal):', e)
@@ -636,7 +664,7 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
                 rpc.query({
                     model:  'pos.payment.method',
                     method: 'orbit_stripe_cancel_payment',
-                    args:   [intentId],
+                    args:   [intentId, posPayload],
                     kwargs: { context: this.pos.env.session.user_context },
                 }, { silent: true }).catch(e =>
                     console.warn('[OrbitStripe] Cancel PI server-side failed (non-fatal):', e)
