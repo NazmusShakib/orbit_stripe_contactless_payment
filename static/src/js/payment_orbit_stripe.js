@@ -606,6 +606,7 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
         send_payment_cancel: async function (order, cid) {
             this._super(...arguments);
             const line = this.pos.get_order().selected_paymentline;
+            const configuredReaderId = this._getConfiguredReaderId();
 
             // Cancel SDK collection
             if (this._terminal &&
@@ -615,6 +616,18 @@ odoo.define('orbit_stripe_contactless_payment.payment', function (require) {
                 } catch (e) {
                     console.warn('[OrbitStripe] cancelCollectPaymentMethod failed (non-fatal):', e);
                 }
+            }
+
+            // Cancel reader action server-side for configured-reader mode
+            if (configuredReaderId) {
+                rpc.query({
+                    model: 'pos.payment.method',
+                    method: 'orbit_stripe_cancel_reader_action',
+                    args: [[this.payment_method.id]],
+                    kwargs: { context: this.pos.env.session.user_context },
+                }, { silent: true }).catch(e =>
+                    console.warn('[OrbitStripe] Cancel reader action failed (non-fatal):', e)
+                );
             }
 
             // Cancel the PaymentIntent server-side

@@ -370,6 +370,28 @@ class StripeTerminalService(models.AbstractModel):
     def simulate_reader_payment(self, payment_intent_id, reader_id=None):
         return self.process_reader_payment(payment_intent_id, reader_id=reader_id)
 
+    @api.model
+    def cancel_reader_action(self, reader_id=None):
+        """
+        Cancel the active action on a Stripe reader.
+
+        This is required for the server-side reader flow used by POS when a
+        configured reader_id is present. Cancelling only the PaymentIntent is
+        not enough to clear the "Tap / Insert" screen on the reader itself.
+        """
+        client = self._get_stripe_client()
+
+        if not reader_id:
+            reader_id = self._get_param('reader_id', '')
+        if not reader_id:
+            return {'success': True, 'status': 'no_reader_configured'}
+
+        _logger.info('Cancelling active action on reader %s', reader_id)
+        result = self._safe_call(client.v1.terminal.readers.cancel_action, reader_id, {})
+        if result.get('error'):
+            return result
+        return {'success': True, 'status': result.get('status'), 'reader_id': reader_id}
+
     # ------------------------------------------------------------------
     # Refunds
     # ------------------------------------------------------------------

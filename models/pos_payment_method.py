@@ -216,6 +216,23 @@ class PosPaymentMethod(models.Model):
             _logger.exception('orbit_stripe_retrieve_payment_intent unexpected error')
             return {'error': str(e)}
 
+    def orbit_stripe_cancel_reader_action(self):
+        """Cancel the active action on the configured Stripe reader."""
+        self.ensure_one()
+        if not self.env.user.has_group('point_of_sale.group_pos_user'):
+            raise AccessError(_('Access denied: POS user required.'))
+
+        reader_id = self._get_resolved_orbit_stripe_reader_id()
+        _logger.info(
+            'POS reader cancel request: method=%s reader=%s',
+            self.name, reader_id or '(unset)'
+        )
+        try:
+            return self._get_stripe_service().cancel_reader_action(reader_id=reader_id)
+        except Exception as e:
+            _logger.exception('orbit_stripe_cancel_reader_action unexpected error')
+            return {'error': str(e)}
+
     # ------------------------------------------------------------------
     # RPC: Capture (called after processPayment succeeds in JS)
     # ------------------------------------------------------------------
