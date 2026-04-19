@@ -94,7 +94,8 @@
                             string="Issue Refund"
                             type="object"
                             class="btn-danger"
-                            icon="fa-undo"/>
+                            icon="fa-undo"
+                            confirm="This will create the Odoo refund entry and send the refund to Stripe immediately. This action cannot be undone. Do you want to continue?"/>
                     <button string="Cancel" class="btn-secondary" special="cancel"/>
                 </footer>
             </form>
