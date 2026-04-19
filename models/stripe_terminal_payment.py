@@ -12,8 +12,11 @@ Phase 2 note: Add real reader/location linking here when hardware is added.
 """
 
 import logging
+from uuid import uuid4
+
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools import float_is_zero
 
 _logger = logging.getLogger(__name__)
 
@@ -121,6 +124,37 @@ class StripeTerminalPayment(models.Model):
         readonly=True,
         copy=False,
         tracking=True,
+    )
+    pos_order_id = fields.Many2one(
+        'pos.order',
+        string='POS Order',
+        readonly=True,
+        copy=False,
+        tracking=True,
+    )
+    pos_payment_id = fields.Many2one(
+        'pos.payment',
+        string='POS Payment',
+        readonly=True,
+        copy=False,
+    )
+    refund_pos_order_ids = fields.Many2many(
+        'pos.order',
+        'orbit_stripe_terminal_payment_refund_order_rel',
+        'payment_id',
+        'order_id',
+        string='Refund POS Orders',
+        readonly=True,
+        copy=False,
+    )
+    refund_pos_payment_ids = fields.Many2many(
+        'pos.payment',
+        'orbit_stripe_terminal_payment_refund_payment_rel',
+        'payment_id',
+        'pos_payment_id',
+        string='Refund POS Payments',
+        readonly=True,
+        copy=False,
     )
 
     # ── Status ────────────────────────────────────────────────────────────────
@@ -271,6 +305,47 @@ class StripeTerminalPayment(models.Model):
         ], limit=1)
 
     @api.model
+    def get_by_charge_id(self, charge_id):
+        return self.sudo().search([
+            ('stripe_charge_id', '=', charge_id)
+        ], limit=1)
+
+    @api.model
+    def link_from_pos_payment(self, pos_payment):
+        """Bind a synced POS payment back to its Stripe Terminal audit record."""
+        if not pos_payment or pos_payment.payment_method_id.use_payment_terminal != 'orbit_stripe_terminal':
+            return self.browse()
+
+        record = self.browse()
+        txn_ids = [txn for txn in [pos_payment.transaction_id] if txn]
+        if txn_ids:
+            record = self.sudo().search([
+                '|',
+                ('stripe_payment_intent_id', 'in', txn_ids),
+                ('stripe_charge_id', 'in', txn_ids),
+            ], limit=1, order='id desc')
+
+        if not record and pos_payment.pos_order_id:
+            domain = [
+                ('source', '=', 'pos'),
+                ('pos_order_ref', 'in', [
+                    pos_payment.pos_order_id.name,
+                    pos_payment.pos_order_id.pos_reference,
+                ]),
+                ('pos_payment_method_id', '=', pos_payment.payment_method_id.id),
+            ]
+            record = self.sudo().search(domain, limit=1, order='id desc')
+
+        if record:
+            record.sudo().write({
+                'pos_order_id': pos_payment.pos_order_id.id,
+                'pos_payment_id': pos_payment.id,
+                'pos_order_ref': pos_payment.pos_order_id.name or pos_payment.pos_order_id.pos_reference,
+                'pos_payment_method_id': pos_payment.payment_method_id.id,
+            })
+        return record
+
+    @api.model
     def _build_pos_description(self, payment_method, pos_payload=None):
         pos_payload = pos_payload or {}
         parts = [
@@ -324,6 +399,261 @@ class StripeTerminalPayment(models.Model):
                 intent_data.get('id') or '—',
             ))
         return record
+
+    def _get_linked_pos_payment(self):
+        self.ensure_one()
+        if self.pos_payment_id:
+            return self.pos_payment_id
+
+        txn_ids = [
+            txn_id for txn_id in [self.stripe_payment_intent_id, self.stripe_charge_id]
+            if txn_id
+        ]
+        payment = self.env['pos.payment']
+        if txn_ids:
+            payment = self.env['pos.payment'].sudo().search([
+                ('payment_method_id.use_payment_terminal', '=', 'orbit_stripe_terminal'),
+                ('transaction_id', 'in', txn_ids),
+            ], limit=1, order='id desc')
+        if payment:
+            self.sudo().write({
+                'pos_payment_id': payment.id,
+                'pos_order_id': payment.pos_order_id.id,
+                'pos_order_ref': payment.pos_order_id.name or payment.pos_order_id.pos_reference,
+                'pos_payment_method_id': payment.payment_method_id.id,
+            })
+            return payment
+
+        if self.pos_order_id and self.pos_payment_method_id:
+            candidate = self.pos_order_id.payment_ids.filtered(
+                lambda pay: pay.payment_method_id == self.pos_payment_method_id
+            )[:1]
+            if candidate:
+                self.sudo().write({'pos_payment_id': candidate.id})
+                return candidate
+        return self.env['pos.payment']
+
+    def _get_linked_pos_order(self):
+        self.ensure_one()
+        if self.pos_order_id:
+            return self.pos_order_id
+
+        payment = self._get_linked_pos_payment()
+        if payment:
+            return payment.pos_order_id
+
+        if self.pos_order_ref:
+            order = self.env['pos.order'].sudo().search([
+                '|',
+                ('name', '=', self.pos_order_ref),
+                ('pos_reference', '=', self.pos_order_ref),
+            ], limit=1, order='id desc')
+            if order:
+                self.sudo().write({'pos_order_id': order.id})
+                return order
+        return self.env['pos.order']
+
+    def _get_pos_refund_payment_method(self, refund_order):
+        self.ensure_one()
+        payment_method = self.pos_payment_id.payment_method_id or self.pos_payment_method_id
+        if not payment_method:
+            raise UserError(_('No POS payment method could be resolved for this Stripe payment.'))
+        if payment_method not in refund_order.session_id.payment_method_ids:
+            raise UserError(_(
+                'Payment method "%s" is not available in the open POS session "%s".'
+            ) % (payment_method.display_name, refund_order.session_id.display_name))
+        return payment_method
+
+    def _prepare_partial_refund_line_vals(self, refund_line, refund_qty):
+        self.ensure_one()
+        original_line = refund_line.refunded_orderline_id
+        if original_line.pack_lot_ids and not float_is_zero(
+            refund_qty - (original_line.qty - original_line.refunded_qty),
+            precision_rounding=original_line.product_uom_id.rounding or 0.01,
+        ):
+            raise UserError(_(
+                'Partial refunds for tracked POS line "%s" must be processed from the POS order refund screen.'
+            ) % original_line.full_product_name)
+
+        refund_line.write({'qty': -refund_qty})
+        recomputed_vals = refund_line._compute_amount_line_all()
+        refund_line.write(recomputed_vals)
+
+    def _build_pos_refund_order(self, line_quantities, note=''):
+        self.ensure_one()
+        source_order = self._get_linked_pos_order()
+        if not source_order:
+            raise UserError(_('No related POS order was found for this Stripe Terminal payment.'))
+
+        line_quantities = line_quantities or {}
+        selected_lines = []
+        for original_line in source_order.lines:
+            max_qty = original_line.qty - original_line.refunded_qty
+            refund_qty = line_quantities.get(original_line.id, 0.0)
+            if float_is_zero(
+                refund_qty,
+                precision_rounding=original_line.product_uom_id.rounding or 0.01,
+            ):
+                continue
+            if refund_qty < 0 or refund_qty > max_qty + 0.00001:
+                raise UserError(_(
+                    'Refund quantity for "%s" must be between 0 and %s.'
+                ) % (original_line.full_product_name, max_qty))
+            if original_line.pack_lot_ids and not float_is_zero(
+                refund_qty - max_qty,
+                precision_rounding=original_line.product_uom_id.rounding or 0.01,
+            ):
+                raise UserError(_(
+                    'Partial refunds for tracked POS line "%s" must be processed from the POS order refund screen.'
+                ) % original_line.full_product_name)
+            selected_lines.append((original_line, refund_qty, max_qty))
+
+        if not selected_lines:
+            raise UserError(_('Select at least one POS line to refund.'))
+
+        current_session = source_order.session_id.config_id.current_session_id
+        if not current_session:
+            raise UserError(_(
+                'To return product(s), you need to open a session in the POS %s'
+            ) % source_order.session_id.config_id.display_name)
+
+        refund_order_vals = source_order.copy_data(
+            source_order._prepare_refund_values(current_session)
+        )[0]
+        refund_suffix = uuid4().hex[:8].upper()
+        if source_order.pos_reference:
+            refund_order_vals['pos_reference'] = '%s-REFUND-%s' % (
+                source_order.pos_reference,
+                refund_suffix,
+            )
+        if 'order_ref' in refund_order_vals and source_order.pos_reference:
+            refund_order_vals['order_ref'] = refund_order_vals['pos_reference']
+        refund_order = self.env['pos.order'].sudo().create(refund_order_vals)
+
+        for original_line, refund_qty, max_qty in selected_lines:
+            pos_order_line_lot = self.env['pos.pack.operation.lot']
+            for pack_lot in original_line.pack_lot_ids:
+                pos_order_line_lot += pack_lot.copy()
+            refund_line = original_line.copy(
+                original_line._prepare_refund_data(refund_order, pos_order_line_lot)
+            )
+            if not float_is_zero(
+                refund_qty - max_qty,
+                precision_rounding=original_line.product_uom_id.rounding or 0.01,
+            ):
+                self._prepare_partial_refund_line_vals(refund_line, refund_qty)
+
+        refund_order._onchange_amount_all()
+        if note:
+            existing_note = refund_order.note or ''
+            refund_order.write({
+                'note': ('%s\n%s' % (existing_note, note)).strip(),
+            })
+        return refund_order
+
+    def _get_pos_refund_payment_amount(self, refund_order):
+        amount_total = refund_order.amount_total
+        if float_is_zero(
+            refund_order.refunded_order_ids.amount_total + amount_total,
+            precision_rounding=refund_order.currency_id.rounding,
+        ):
+            amount_total = -refund_order.refunded_order_ids.amount_paid
+        return amount_total - refund_order.amount_paid
+
+    def _create_pos_refund_payment(self, refund_order, payment_method):
+        self.ensure_one()
+        payment_amount = self._get_pos_refund_payment_amount(refund_order)
+        if payment_amount >= 0:
+            raise UserError(_('The generated POS refund order does not require a negative refund payment.'))
+
+        wizard = self.env['pos.make.payment'].with_context(
+            active_id=refund_order.id,
+            active_ids=refund_order.ids,
+        ).sudo().create({
+            'config_id': refund_order.session_id.config_id.id,
+            'amount': payment_amount,
+            'payment_method_id': payment_method.id,
+            'payment_name': _('%s refund') % self.name,
+            'payment_date': fields.Datetime.now(),
+        })
+        existing_payments = refund_order.payment_ids
+        wizard.check()
+        refund_payment = (refund_order.payment_ids - existing_payments)[:1]
+        if not refund_payment:
+            refund_payment = refund_order.payment_ids.sorted(lambda payment: payment.id)[-1:]
+        if refund_order.state != 'paid':
+            raise UserError(_(
+                'The generated POS refund order %s was not marked as paid.'
+            ) % refund_order.display_name)
+        return refund_payment, payment_amount
+
+    def action_refund_pos_payment(self, line_quantities, reason='requested_by_customer', note=''):
+        self.ensure_one()
+        if self.state not in ('succeeded', 'partially_refunded'):
+            raise UserError(_(
+                'Refunds can only be issued for succeeded or partially refunded payments.\n'
+                'Current status: %s'
+            ) % self.state)
+        if not self.stripe_payment_intent_id:
+            raise UserError(_('No Stripe PaymentIntent ID found on this record.'))
+
+        source_order = self._get_linked_pos_order()
+        if not source_order:
+            raise UserError(_('No related POS order was found for this Stripe Terminal payment.'))
+
+        refund_order = self._build_pos_refund_order(line_quantities, note=note)
+        payment_method = self._get_pos_refund_payment_method(refund_order)
+        refund_payment, payment_amount = self._create_pos_refund_payment(refund_order, payment_method)
+        refund_amount = abs(payment_amount)
+        if refund_amount <= 0:
+            raise UserError(_('The generated POS refund amount must be greater than zero.'))
+
+        remaining_stripe_amount = self.amount - self.refund_amount
+        if refund_amount > remaining_stripe_amount + 0.001:
+            raise UserError(_(
+                'The selected POS refund total (%s %s) exceeds the remaining Stripe refundable amount (%s %s).'
+            ) % (
+                self.currency_id.symbol or '',
+                refund_amount,
+                self.currency_id.symbol or '',
+                remaining_stripe_amount,
+            ))
+
+        svc = self.env['stripe.terminal.service']
+        amount_int = svc._amount_to_stripe_int(refund_amount, self.currency_id.name or 'GBP')
+        result = svc.create_refund(
+            payment_intent_id=self.stripe_payment_intent_id,
+            amount=amount_int,
+            reason=reason,
+            metadata={
+                'odoo_payment_ref': self.name,
+                'odoo_pos_order': refund_order.name,
+                'odoo_user': self.env.user.name,
+                'odoo_note': note or '',
+            },
+        )
+        if result.get('error'):
+            raise UserError(_('Stripe refund error: %s') % result['error'])
+
+        refund_payment.sudo().write({
+            'transaction_id': result.get('id'),
+            'payment_status': result.get('status'),
+        })
+
+        self.sudo().write({
+            'refund_pos_order_ids': [(4, refund_order.id)],
+            'refund_pos_payment_ids': [(4, refund_payment.id)],
+        })
+        self.register_external_refund(
+            refund_data=result,
+            refund_amount=refund_amount,
+            reason=reason,
+            note=note or _('Refund synced to POS order %s') % refund_order.name,
+        )
+        self.message_post(body=_(
+            'POS refund order <b>%s</b> was created and paid via <b>%s</b>.'
+        ) % (refund_order.name, payment_method.name))
+        return result
 
     def apply_pos_status_update(
         self, state=None, reader_id=None, charge_id=None, error_message=None, note=None,
@@ -714,21 +1044,22 @@ class StripeTerminalPayment(models.Model):
                 'Only succeeded or partially refunded payments can be refunded.'
             ))
         remaining = self.amount - self.refund_amount
+        wizard = self.env['stripe.refund.wizard'].create({
+            'payment_id': self.id,
+            'payment_name': self.name,
+            'original_amount': self.amount,
+            'already_refunded': self.refund_amount,
+            'refund_amount': remaining,
+            'currency_id': self.currency_id.id,
+            'max_refund': remaining,
+        })
         return {
             'name': _('Issue Refund'),
             'type': 'ir.actions.act_window',
             'res_model': 'stripe.refund.wizard',
             'view_mode': 'form',
             'target': 'new',
-            'context': {
-                'default_payment_id': self.id,
-                'default_payment_name': self.name,
-                'default_original_amount': self.amount,
-                'default_already_refunded': self.refund_amount,
-                'default_refund_amount': remaining,
-                'default_currency_id': self.currency_id.id,
-                'default_max_refund': remaining,
-            },
+            'res_id': wizard.id,
         }
 
     def action_open_stripe_dashboard(self):

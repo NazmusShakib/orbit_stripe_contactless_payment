@@ -8,3 +8,5 @@ access_pos_payment_method_orbit_stripe_user,pos.payment.method orbit.stripe user
 access_pos_payment_method_orbit_stripe_manager,pos.payment.method n.stripe manager,point_of_sale.model_pos_payment_method,group_stripe_terminal_manager,1,1,1,0
 access_stripe_refund_wizard_user,stripe.refund.wizard user,model_stripe_refund_wizard,group_stripe_terminal_user,1,1,1,1
 access_stripe_refund_wizard_manager,stripe.refund.wizard manager,model_stripe_refund_wizard,group_stripe_terminal_manager,1,1,1,1
+access_stripe_refund_wizard_line_user,stripe.refund.wizard.line user,model_stripe_refund_wizard_line,group_stripe_terminal_user,1,1,1,1
+access_stripe_refund_wizard_line_manager,stripe.refund.wizard.line manager,model_stripe_refund_wizard_line,group_stripe_terminal_manager,1,1,1,1

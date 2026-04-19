@@ -130,6 +130,8 @@
                                attrs="{'invisible': [('source', '!=', 'pos')]}">
                             <field name="pos_config_name" readonly="1"/>
                             <field name="pos_order_ref" readonly="1"/>
+                            <field name="pos_order_id" readonly="1"/>
+                            <field name="pos_payment_id" readonly="1"/>
                             <field name="pos_payment_method_id" readonly="1"/>
                         </group>
                     </group>
@@ -154,6 +156,13 @@
                                 <field name="payment_completed_at" readonly="1"/>
                                 <field name="create_date" readonly="1" string="Record Created"/>
                                 <field name="write_date" readonly="1" string="Last Updated"/>
+                            </group>
+                        </page>
+                        <page string="POS Refund Sync" name="pos_refunds"
+                              attrs="{'invisible': [('source', '!=', 'pos')]}">
+                            <group>
+                                <field name="refund_pos_order_ids" widget="many2many_tags" readonly="1"/>
+                                <field name="refund_pos_payment_ids" widget="many2many_tags" readonly="1"/>
                             </group>
                         </page>
                         <page string="Error Details" name="errors"

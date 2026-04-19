@@ -14,6 +14,7 @@
                     <!-- Payment summary -->
                     <group string="Original Payment">
                         <field name="payment_id" invisible="1"/>
+                        <field name="use_pos_refund_flow" invisible="1"/>
                         <field name="payment_name" readonly="1"/>
                         <field name="currency_id" invisible="1"/>
                         <field name="max_refund" invisible="1"/>
@@ -21,10 +22,13 @@
                                widget="monetary" options="{'currency_field': 'currency_id'}"/>
                         <field name="already_refunded" readonly="1"
                                widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                        <field name="pos_order_id" readonly="1"
+                               attrs="{'invisible': [('use_pos_refund_flow', '=', False)]}"/>
                     </group>
 
                     <!-- Refund options -->
-                    <group string="Refund Details">
+                    <group string="Refund Details"
+                           attrs="{'invisible': [('use_pos_refund_flow', '=', True)]}">
                         <field name="refund_type" widget="radio"/>
                         <field name="refund_amount"
                                widget="monetary"
@@ -34,12 +38,50 @@
                         <field name="note" placeholder="Optional internal note..."/>
                     </group>
 
+                    <group string="POS Refund Details"
+                           attrs="{'invisible': [('use_pos_refund_flow', '=', False)]}">
+                        <field name="selected_line_total"
+                               widget="monetary"
+                               options="{'currency_field': 'currency_id'}"
+                               readonly="1"/>
+                        <field name="selected_refund_amount"
+                               widget="monetary"
+                               options="{'currency_field': 'currency_id'}"
+                               readonly="1"/>
+                        <field name="reason"/>
+                        <field name="note" placeholder="Optional internal note for the refund order..."/>
+                    </group>
+
+                    <field name="refund_line_ids"
+                           attrs="{'invisible': [('use_pos_refund_flow', '=', False)]}">
+                        <tree string="POS Refund Lines" create="0" delete="0" editable="bottom">
+                            <field name="original_line_id" invisible="1"/>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="product_id" readonly="1"/>
+                            <field name="original_qty" readonly="1"/>
+                            <field name="already_refunded_qty" readonly="1"/>
+                            <field name="max_refundable_qty" readonly="1"/>
+                            <field name="refund_qty"/>
+                            <field name="max_refund_total" readonly="1"
+                                   widget="monetary"
+                                   options="{'currency_field': 'currency_id'}"/>
+                            <field name="refund_total" readonly="1"
+                                   widget="monetary"
+                                   options="{'currency_field': 'currency_id'}"/>
+                            <field name="lot_names" readonly="1" optional="hide"/>
+                        </tree>
+                    </field>
+
                     <!-- Info box -->
                     <div class="alert alert-info" role="alert">
                         <strong>ℹ️ How refunds work:</strong>
                         <ul class="mb-0 mt-1">
                             <li>The refund is sent directly to the customer's original payment method
                                 (card, Apple Pay, Google Pay, etc.)</li>
+                            <li attrs="{'invisible': [('use_pos_refund_flow', '=', False)]}">
+                                For POS payments, this also creates a real POS refund order and payment
+                                so session totals, stock, and margin reports stay aligned
+                            </li>
                             <li>Refunds typically appear on the customer's statement within
                                 <strong>5–10 business days</strong></li>
                             <li>This action calls the Stripe API immediately — it cannot be undone</li>
