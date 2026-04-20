@@ -453,6 +453,84 @@ class StripeTerminalPayment(models.Model):
                 return order
         return self.env['pos.order']
 
+    def _get_latest_refund_pos_order(self):
+        self.ensure_one()
+        refund_orders = self.refund_pos_order_ids.sorted(
+            key=lambda order: (order.date_order or fields.Datetime.now(), order.id)
+        )
+        return refund_orders[-1:] if refund_orders else self.env['pos.order']
+
+    def _print_pos_order_copy(self, pos_order, copy_label='customer'):
+        self.ensure_one()
+        if not pos_order:
+            raise UserError(_(
+                'No POS order is linked to this Stripe Terminal payment.'
+            ))
+
+        if pos_order.account_move:
+            move = pos_order.account_move
+            self.message_post(body=_(
+                '%s copy <b>%s</b> was printed from this Stripe Terminal payment.'
+            ) % (
+                copy_label.capitalize(),
+                move.display_name,
+            ))
+            return move.action_invoice_print()
+
+        receipt_label = _('refund receipt') if pos_order.amount_total < 0 else _('receipt')
+        self.message_post(body=_(
+            '%s %s for POS order <b>%s</b> was printed from this Stripe Terminal payment.'
+        ) % (
+            copy_label.capitalize(),
+            receipt_label,
+            pos_order.display_name,
+        ))
+        return self.env.ref(
+            'orbit_stripe_contactless_payment.action_report_pos_customer_receipt'
+        ).report_action(pos_order)
+
+    def _print_backend_copy(self, copy_type='receipt'):
+        self.ensure_one()
+        copy_type = copy_type or 'receipt'
+        if copy_type == 'refund' and float_is_zero(
+            self.refund_amount,
+            precision_rounding=self.currency_id.rounding,
+        ):
+            raise UserError(_(
+                'No refund receipt is available yet for this Stripe Terminal payment.'
+            ))
+
+        document_label = _('refund receipt') if copy_type == 'refund' else _('receipt')
+        self.message_post(body=_(
+            'A backend %s for Stripe Terminal payment <b>%s</b> was printed.'
+        ) % (
+            document_label,
+            self.display_name,
+        ))
+        report = self.env.ref(
+            'orbit_stripe_contactless_payment.action_report_stripe_terminal_payment_receipt'
+        )
+        return report.with_context(print_copy_type=copy_type).report_action(self)
+
+    def action_print_customer_copy(self):
+        self.ensure_one()
+        pos_order = self._get_linked_pos_order()
+        if not pos_order:
+            return self._print_backend_copy(copy_type='receipt')
+        return self._print_pos_order_copy(pos_order, copy_label='customer')
+
+    def action_print_refund_copy(self):
+        self.ensure_one()
+        refund_order = self._get_latest_refund_pos_order()
+        if not refund_order:
+            return self._print_backend_copy(copy_type='refund')
+        return self._print_pos_order_copy(refund_order, copy_label='refund')
+
+    def action_print_customer_invoice(self):
+        """Backward-compatible alias for older buttons."""
+        self.ensure_one()
+        return self.action_print_customer_copy()
+
     def _get_pos_refund_payment_method(self, refund_order):
         self.ensure_one()
         payment_method = self.pos_payment_id.payment_method_id or self.pos_payment_method_id

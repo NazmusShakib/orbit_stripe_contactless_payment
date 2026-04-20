@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_report_pos_customer_receipt" model="ir.actions.report">
+        <field name="name">POS Customer Receipt</field>
+        <field name="model">pos.order</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">orbit_stripe_contactless_payment.report_pos_customer_receipt</field>
+        <field name="report_file">orbit_stripe_contactless_payment.report_pos_customer_receipt</field>
+        <field name="print_report_name">'Receipt - %s' % (object.pos_reference or object.name)</field>
+    </record>
+
+    <record id="action_report_stripe_terminal_payment_receipt" model="ir.actions.report">
+        <field name="name">Stripe Terminal Receipt</field>
+        <field name="model">stripe.terminal.payment</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">orbit_stripe_contactless_payment.report_stripe_terminal_payment_receipt</field>
+        <field name="report_file">orbit_stripe_contactless_payment.report_stripe_terminal_payment_receipt</field>
+        <field name="print_report_name">'Stripe Terminal - %s' % (object.name)</field>
+    </record>
+
+    <template id="report_pos_customer_receipt">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="orbit_stripe_contactless_payment.report_pos_customer_receipt_document"/>
+            </t>
+        </t>
+    </template>
+
+    <template id="report_pos_customer_receipt_document">
+        <t t-call="web.basic_layout">
+            <t t-set="is_refund" t-value="o.amount_total &lt; 0"/>
+            <div class="page">
+                <div class="mb-3">
+                    <h2 style="margin-bottom: 4px;">
+                        <t t-if="is_refund">Refund Receipt</t>
+                        <t t-else="">Sales Receipt</t>
+                    </h2>
+                    <div><strong t-esc="o.company_id.name"/></div>
+                    <div t-if="o.company_id.partner_id.contact_address" t-esc="o.company_id.partner_id.contact_address"/>
+                    <div t-if="o.company_id.phone">Tel: <span t-esc="o.company_id.phone"/></div>
+                    <div t-if="o.company_id.email" t-esc="o.company_id.email"/>
+                    <div t-if="o.company_id.website" t-esc="o.company_id.website"/>
+                </div>
+
+                <table class="table table-sm o_main_table" style="width: 100%; margin-bottom: 16px;">
+                    <tbody>
+                        <tr>
+                            <td><strong>Order</strong></td>
+                            <td t-esc="o.pos_reference or o.name"/>
+                        </tr>
+                        <tr>
+                            <td><strong>POS Session</strong></td>
+                            <td t-esc="o.session_id.display_name"/>
+                        </tr>
+                        <tr>
+                            <td><strong>Date</strong></td>
+                            <td><span t-field="o.date_order"/></td>
+                        </tr>
+                        <tr t-if="o.partner_id">
+                            <td><strong>Customer</strong></td>
+                            <td t-esc="o.partner_id.display_name"/>
+                        </tr>
+                        <tr t-if="is_refund and o.refunded_order_ids">
+                            <td><strong>Original Sale</strong></td>
+                            <td t-esc="', '.join(o.refunded_order_ids.mapped('display_name'))"/>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <table class="table table-sm" style="width: 100%; margin-bottom: 16px;">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th class="text-end">Qty</th>
+                            <th class="text-end">Unit Price</th>
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="o.lines" t-as="line">
+                            <td>
+                                <div t-esc="line.full_product_name or line.product_id.display_name"/>
+                                <div t-if="line.customer_note" style="font-size: 11px; color: #666;">
+                                    Note: <span t-esc="line.customer_note"/>
+                                </div>
+                                <div t-if="line.pack_lot_ids" style="font-size: 11px; color: #666;">
+                                    Lots: <span t-esc="', '.join(line.pack_lot_ids.mapped('lot_name'))"/>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <span t-esc="line.qty"/>
+                            </td>
+                            <td class="text-end">
+                                <span t-field="line.price_unit"
+                                      t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                            <td class="text-end">
+                                <span t-field="line.price_subtotal_incl"
+                                      t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="row" style="margin-bottom: 16px;">
+                    <div class="col-6">
+                        <div t-if="o.note">
+                            <strong>Note</strong><br/>
+                            <span t-esc="o.note" style="white-space: pre-line;"/>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <table class="table table-sm" style="width: 100%;">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Subtotal</strong></td>
+                                    <td class="text-end">
+                                        <span t-esc="o.amount_total - o.amount_tax"
+                                              t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Taxes</strong></td>
+                                    <td class="text-end">
+                                        <span t-field="o.amount_tax"
+                                              t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Total</strong></td>
+                                    <td class="text-end">
+                                        <span t-field="o.amount_total"
+                                              t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 style="margin-bottom: 8px;">Payments</h4>
+                    <table class="table table-sm" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Date</th>
+                                <th class="text-end">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="o.payment_ids" t-as="payment">
+                                <td>
+                                    <span t-esc="payment.payment_method_id.display_name"/>
+                                    <div t-if="payment.transaction_id" style="font-size: 11px; color: #666;">
+                                        Ref: <span t-esc="payment.transaction_id"/>
+                                    </div>
+                                </td>
+                                <td><span t-field="payment.payment_date"/></td>
+                                <td class="text-end">
+                                    <span t-field="payment.amount"
+                                          t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top: 24px; font-size: 11px; color: #666;">
+                    Customer copy generated from Stripe Terminal Payments.
+                </div>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_stripe_terminal_payment_receipt">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="orbit_stripe_contactless_payment.report_stripe_terminal_payment_receipt_document"/>
+            </t>
+        </t>
+    </template>
+
+    <template id="report_stripe_terminal_payment_receipt_document">
+        <t t-call="web.basic_layout">
+            <t t-set="copy_type" t-value="o.env.context.get('print_copy_type', 'receipt')"/>
+            <t t-set="is_refund_copy" t-value="copy_type == 'refund'"/>
+            <div class="page">
+                <div class="mb-3">
+                    <h2 style="margin-bottom: 4px;">
+                        <t t-if="is_refund_copy">Refund Receipt</t>
+                        <t t-else="">Payment Receipt</t>
+                    </h2>
+                    <div><strong t-esc="o.company_id.name"/></div>
+                    <div t-if="o.company_id.partner_id.contact_address" t-esc="o.company_id.partner_id.contact_address"/>
+                    <div t-if="o.company_id.phone">Tel: <span t-esc="o.company_id.phone"/></div>
+                    <div t-if="o.company_id.email" t-esc="o.company_id.email"/>
+                    <div t-if="o.company_id.website" t-esc="o.company_id.website"/>
+                </div>
+
+                <table class="table table-sm o_main_table" style="width: 100%; margin-bottom: 16px;">
+                    <tbody>
+                        <tr>
+                            <td><strong>Reference</strong></td>
+                            <td t-esc="o.name"/>
+                        </tr>
+                        <tr t-if="o.description">
+                            <td><strong>Description</strong></td>
+                            <td t-esc="o.description"/>
+                        </tr>
+                        <tr>
+                            <td><strong>Source</strong></td>
+                            <td t-esc="dict(o._fields['source'].selection).get(o.source, o.source)"/>
+                        </tr>
+                        <tr>
+                            <td><strong>Status</strong></td>
+                            <td t-esc="dict(o._fields['state'].selection).get(o.state, o.state)"/>
+                        </tr>
+                        <tr>
+                            <td><strong>Date</strong></td>
+                            <td>
+                                <span t-if="o.payment_completed_at" t-field="o.payment_completed_at"/>
+                                <span t-elif="o.refund_date" t-field="o.refund_date"/>
+                                <span t-else="" t-field="o.create_date"/>
+                            </td>
+                        </tr>
+                        <tr t-if="o.user_id">
+                            <td><strong>Handled By</strong></td>
+                            <td t-esc="o.user_id.display_name"/>
+                        </tr>
+                        <tr t-if="o.stripe_reader_id">
+                            <td><strong>Reader</strong></td>
+                            <td t-esc="o.stripe_reader_id"/>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <table class="table table-sm" style="width: 100%; margin-bottom: 16px;">
+                    <tbody>
+                        <tr>
+                            <td><strong>Payment Amount</strong></td>
+                            <td class="text-end">
+                                <span t-field="o.amount"
+                                      t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                        <tr t-if="o.refund_amount">
+                            <td><strong>Refunded</strong></td>
+                            <td class="text-end">
+                                <span t-field="o.refund_amount"
+                                      t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                        <tr t-if="is_refund_copy">
+                            <td><strong>Refund Copy</strong></td>
+                            <td class="text-end">
+                                <span t-field="o.refund_amount"
+                                      t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                        <tr t-if="not is_refund_copy and o.refund_amount">
+                            <td><strong>Net Paid</strong></td>
+                            <td class="text-end">
+                                <span t-esc="o.amount - o.refund_amount"
+                                      t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="row" style="margin-bottom: 16px;">
+                    <div class="col-6">
+                        <div t-if="o.refund_reason or o.refund_note">
+                            <h4 style="margin-bottom: 8px;">Refund Details</h4>
+                            <div t-if="o.refund_reason">
+                                <strong>Reason</strong>:
+                                <span t-esc="dict(o._fields['refund_reason'].selection).get(o.refund_reason, o.refund_reason)"/>
+                            </div>
+                            <div t-if="o.refund_note">
+                                <strong>Note</strong><br/>
+                                <span t-esc="o.refund_note" style="white-space: pre-line;"/>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <table class="table table-sm" style="width: 100%;">
+                            <tbody>
+                                <tr t-if="o.stripe_payment_intent_id">
+                                    <td><strong>PaymentIntent</strong></td>
+                                    <td t-esc="o.stripe_payment_intent_id"/>
+                                </tr>
+                                <tr t-if="o.stripe_charge_id">
+                                    <td><strong>Charge</strong></td>
+                                    <td t-esc="o.stripe_charge_id"/>
+                                </tr>
+                                <tr t-if="o.stripe_refund_id">
+                                    <td><strong>Refund</strong></td>
+                                    <td t-esc="o.stripe_refund_id"/>
+                                </tr>
+                                <tr>
+                                    <td><strong>Mode</strong></td>
+                                    <td>
+                                        <t t-if="o.test_mode">Test</t>
+                                        <t t-else="">Live</t>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="margin-top: 24px; font-size: 11px; color: #666;">
+                    Printed from Stripe Terminal Payments.
+                </div>
+            </div>
+        </t>
+    </template>
+</odoo>

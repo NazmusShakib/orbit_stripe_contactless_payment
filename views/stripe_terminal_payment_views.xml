@@ -58,6 +58,19 @@
                             class="btn-link"
                             attrs="{'invisible': [('stripe_payment_intent_id', '=', False)]}"/>
 
+                    <button name="action_print_customer_copy"
+                            string="Receipt"
+                            type="object"
+                            class="btn-secondary"
+                            help="Print the customer invoice if one exists, otherwise print a receipt."/>
+
+                    <button name="action_print_refund_copy"
+                            string="Refund"
+                            type="object"
+                            class="btn-secondary"
+                            attrs="{'invisible': [('refund_amount', '=', 0.0)]}"
+                            help="Print the latest refund credit note if one exists, otherwise print the refund receipt."/>
+
                     <field name="state" widget="statusbar"
                            statusbar_visible="draft,intent_created,processing,succeeded"/>
                 </header>
@@ -125,6 +138,7 @@
                             <field name="test_mode" readonly="1"/>
                             <field name="is_simulated" readonly="1"/>
                             <field name="source" readonly="1"/>
+                            <field name="refund_amount" invisible="1"/>
                         </group>
                         <group string="POS Details"
                                attrs="{'invisible': [('source', '!=', 'pos')]}">
@@ -201,6 +215,7 @@
                 <field name="pos_order_ref" optional="hide"/>
                 <field name="amount" widget="monetary" options="{'currency_field': 'currency_id'}"/>
                 <field name="currency_id" invisible="1"/>
+                <field name="refund_amount" invisible="1"/>
                 <field name="state" widget="badge"
                        decoration-success="state == 'succeeded'"
                        decoration-danger="state == 'failed'"
@@ -211,6 +226,15 @@
                 <field name="test_mode" widget="boolean_toggle"/>
                 <field name="user_id"/>
                 <field name="create_date" string="Date"/>
+                <button name="action_print_customer_copy"
+                        string="Receipt"
+                        type="object"
+                        icon="fa-print"/>
+                <button name="action_print_refund_copy"
+                        string="Refund"
+                        type="object"
+                        icon="fa-undo"
+                        attrs="{'invisible': [('refund_amount', '=', 0.0)]}"/>
             </tree>
         </field>
     </record>

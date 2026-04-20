@@ -41,6 +41,8 @@ Note: This module uses Stripe's test/sandbox environment only.
         # Data / configuration
         'data/ir_config_parameter_data.xml',
         'data/assets.xml',
+        # Reports
+        'reports/pos_customer_receipt_report.xml',
         # Views
         'views/stripe_terminal_payment_views.xml',
         'views/stripe_setup_wizard_views.xml',
