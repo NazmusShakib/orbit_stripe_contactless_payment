@@ -62,14 +62,14 @@
                             string="Receipt"
                             type="object"
                             class="btn-secondary"
-                            help="Print the customer invoice if one exists, otherwise print a receipt."/>
+                            help="Open a thermal receipt page for printing."/>
 
                     <button name="action_print_refund_copy"
                             string="Refund"
                             type="object"
                             class="btn-secondary"
                             attrs="{'invisible': [('refund_amount', '=', 0.0)]}"
-                            help="Print the latest refund credit note if one exists, otherwise print the refund receipt."/>
+                            help="Open a thermal refund receipt page for printing."/>
 
                     <field name="state" widget="statusbar"
                            statusbar_visible="draft,intent_created,processing,succeeded"/>
