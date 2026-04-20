@@ -467,16 +467,6 @@ class StripeTerminalPayment(models.Model):
                 'No POS order is linked to this Stripe Terminal payment.'
             ))
 
-        if pos_order.account_move:
-            move = pos_order.account_move
-            self.message_post(body=_(
-                '%s copy <b>%s</b> was printed from this Stripe Terminal payment.'
-            ) % (
-                copy_label.capitalize(),
-                move.display_name,
-            ))
-            return move.action_invoice_print()
-
         receipt_label = _('refund receipt') if pos_order.amount_total < 0 else _('receipt')
         self.message_post(body=_(
             '%s %s for POS order <b>%s</b> was printed from this Stripe Terminal payment.'
@@ -527,8 +517,15 @@ class StripeTerminalPayment(models.Model):
         return self._print_pos_order_copy(refund_order, copy_label='refund')
 
     def action_print_customer_invoice(self):
-        """Backward-compatible alias for older buttons."""
+        """Backward-compatible invoice action for older button hooks."""
         self.ensure_one()
+        pos_order = self._get_linked_pos_order()
+        if pos_order and pos_order.account_move:
+            move = pos_order.account_move
+            self.message_post(body=_(
+                'Invoice <b>%s</b> was printed from this Stripe Terminal payment.'
+            ) % move.display_name)
+            return move.action_invoice_print()
         return self.action_print_customer_copy()
 
     def _get_pos_refund_payment_method(self, refund_order):

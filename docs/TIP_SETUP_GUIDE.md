@@ -246,7 +246,7 @@ Also visible in **Stripe Log** panel (click the button in POS top bar).
 
 ## For New Projects — Quick Setup
 
-1. **Install module** (see IOrbitTALLATION_GUIDE.md)
+1. **Install module** (see [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md))
 2. **Settings → Stripe Terminal:**
    - Add API keys
    - Add Location ID + Reader ID
