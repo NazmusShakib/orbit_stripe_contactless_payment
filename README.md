@@ -20,7 +20,7 @@ It currently supports:
 - Odoo-aligned POS refunds for POS-linked Stripe payments
 - Thermal HTML `Receipt` and `Refund` printing from `Stripe Terminal Payments`
 - Optional webhooks for payment and refund sync
-- Optional POS tip /  gratuity support
+- Optional POS tip / gratuity support
 
 ---
 

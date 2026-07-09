@@ -146,7 +146,7 @@ This avoids depending on browser-side reader discovery.
 Recommended webhook endpoint:
 
 ```text
-https://DOMAIN/stripe/terminal/webhook
+https://YOUR-DOMAIN/stripe/terminal/webhook
 ```
 
 Recommended events:
